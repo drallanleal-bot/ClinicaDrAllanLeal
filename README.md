@@ -428,7 +428,7 @@ tr:hover td{background:#fafaf8}
 <div id="app" style="display:none;flex-direction:column;min-height:100vh">
   <div class="topbar">
     <div class="brand">
-  <img src="ALLAN-logo (1).png" style="width:32px; height:32px; object-fit:contain;">
+  <img src="ALLAN-logo (1).jpeg" style="width:32px; height:32px; object-fit:contain;">
   Dr. Allan Leal &nbsp;<span style="opacity:.5;font-weight:300">|</span>&nbsp; 
   <span id="pageTitle" style="font-weight:300;opacity:.85">Panel Principal</span>
 </div>
