@@ -183,7 +183,7 @@ small,
 #loginScreen{
   position:fixed;
   inset:0;
-  background:url('ALLAN2 (1).png') center/cover no-repeat !important;
+  background:url('ALLAN2 (1).jpeg') center/cover no-repeat !important;
   display:flex;
   align-items:center;
   justify-content:center;
