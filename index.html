@@ -689,6 +689,7 @@ tr:hover td{
       <button class="navBtn" onclick="goTo('asistente')" id="nav-asistente"><span class="navIcon">🤖</span><span class="navLabel">Asistente IA</span></button>
       <button class="navBtn" onclick="goTo('recordatorios')" id="nav-recordatorios"><span class="navIcon">🔔</span><span class="navLabel">Recordatorios</span></button>
       <button class="navBtn" id="nav-redes" onclick="goTo('redes')"><span class="navIcon">📱</span><span class="navLabel">Redes Sociales</span></button>
+      <button class="navBtn" id="nav-respaldos" onclick="goTo('respaldos')"><span class="navIcon">💾</span><span class="navLabel">Respaldos</span></button>
       <div class="sidebar-footer">
         <button class="navBtn" onclick="doLogout()"><span class="navIcon">🚪</span><span class="navLabel">Cerrar sesión</span></button>
       </div>
@@ -864,10 +865,178 @@ let state = {
   nextPacId:4, nextHistId:3, nextCitaId:4, nextPostId:3
 };
 
+const APP_STORAGE_KEY = 'clinicaDrAllanLeal.data.v1';
+const ONEDRIVE_WEB_FOLDER_URL = 'https://1drv.ms/f/c/8a18e0b19317f2a1/IgDnbLPfCqW2Qpg3YCXVs6m7AfttHIgorwZaFIFj-l0c_Vw?e=gn7HFB';
+const ONEDRIVE_HANDLE_DB = 'clinicaDrAllanLeal.handles.v1';
+const ONEDRIVE_HANDLE_STORE = 'handles';
+const ONEDRIVE_HANDLE_KEY = 'oneDriveBackupFolder';
+let oneDriveDirHandle = null;
+
+function normalizeStateCounters() {
+  state.nextPacId = Math.max(1, ...state.pacientes.map(p => Number(p.id) || 0)) + 1;
+  state.nextHistId = Math.max(1, ...state.historias.map(h => Number(h.id) || 0)) + 1;
+  state.nextCitaId = Math.max(1, ...state.citas.map(c => Number(c.id) || 0)) + 1;
+  state.nextPostId = Math.max(1, ...state.posts.map(p => Number(p.id) || 0)) + 1;
+}
+
+function loadLocalData() {
+  try {
+    const raw = localStorage.getItem(APP_STORAGE_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (saved && saved.state) {
+      state = { ...state, ...saved.state };
+      normalizeStateCounters();
+    }
+  } catch (e) {
+    console.warn('No se pudo cargar el respaldo local.', e);
+  }
+}
+
+function backupPayload() {
+  return {
+    app: 'ClinicaDrAllanLeal',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    state
+  };
+}
+
+async function saveAppData(options = {}) {
+  localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(backupPayload()));
+  if (options.backupToFolder && oneDriveDirHandle) {
+    await writeOneDriveBackup(false);
+  }
+}
+
+function downloadBackup() {
+  const blob = new Blob([JSON.stringify(backupPayload(), null, 2)], { type:'application/json;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `clinica-dr-allan-leal-respaldo-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  URL.revokeObjectURL(a.href);
+  a.remove();
+}
+
+function openOneDriveWebFolder() {
+  window.open(ONEDRIVE_WEB_FOLDER_URL, '_blank', 'noopener');
+}
+
+function openHandleDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) return reject(new Error('IndexedDB no disponible'));
+    const request = indexedDB.open(ONEDRIVE_HANDLE_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(ONEDRIVE_HANDLE_STORE);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveDirectoryHandle(handle) {
+  const db = await openHandleDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ONEDRIVE_HANDLE_STORE, 'readwrite');
+    tx.objectStore(ONEDRIVE_HANDLE_STORE).put(handle, ONEDRIVE_HANDLE_KEY);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadDirectoryHandle() {
+  const db = await openHandleDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(ONEDRIVE_HANDLE_STORE, 'readonly');
+    const request = tx.objectStore(ONEDRIVE_HANDLE_STORE).get(ONEDRIVE_HANDLE_KEY);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function hasWritePermission(handle, requestPermission = false) {
+  const options = { mode:'readwrite' };
+  if (!handle.queryPermission || !handle.requestPermission) return true;
+  if (await handle.queryPermission(options) === 'granted') return true;
+  return requestPermission && await handle.requestPermission(options) === 'granted';
+}
+
+async function restoreOneDriveFolderConnection(requestPermission = false) {
+  if (!window.showDirectoryPicker) return false;
+  try {
+    const handle = await loadDirectoryHandle();
+    if (!handle) return false;
+    if (!await hasWritePermission(handle, requestPermission)) return false;
+    oneDriveDirHandle = handle;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function connectOneDriveFolder() {
+  if (!window.showDirectoryPicker) {
+    alert('Este navegador no permite guardar directamente en una carpeta. Use "Descargar respaldo" y luego abra la carpeta OneDrive para subir o mover el archivo.');
+    return;
+  }
+  try {
+    oneDriveDirHandle = await window.showDirectoryPicker({ mode:'readwrite' });
+    if (!await hasWritePermission(oneDriveDirHandle, true)) {
+      alert('No se otorgó permiso para escribir en la carpeta seleccionada.');
+      return;
+    }
+    await saveDirectoryHandle(oneDriveDirHandle);
+    await writeOneDriveBackup(true);
+  } catch (e) {
+    if (e.name !== 'AbortError') alert('No se pudo conectar la carpeta seleccionada.');
+  }
+}
+
+async function writeOneDriveBackup(showAlert = true) {
+  if (!oneDriveDirHandle) return false;
+  try {
+    const fileHandle = await oneDriveDirHandle.getFileHandle('clinica-dr-allan-leal-respaldo.json', { create:true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(backupPayload(), null, 2));
+    await writable.close();
+    if (showAlert) alert('Respaldo guardado en la carpeta seleccionada. Si esa carpeta está dentro de OneDrive, se sincronizará automáticamente.');
+    return true;
+  } catch (e) {
+    console.warn('No se pudo escribir el respaldo.', e);
+    if (showAlert) alert('No se pudo escribir el respaldo en la carpeta seleccionada.');
+    return false;
+  }
+}
+
+function importBackup(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      if (!data.state) throw new Error('Formato inválido');
+      state = { ...state, ...data.state };
+      normalizeStateCounters();
+      saveAppData();
+      alert('Respaldo importado correctamente.');
+      goTo(currentPage || 'dashboard');
+    } catch (e) {
+      alert('No se pudo importar el respaldo. Verifique que sea un archivo JSON válido de esta aplicación.');
+    } finally {
+      input.value = '';
+    }
+  };
+  reader.readAsText(file);
+}
+
+loadLocalData();
+
 function cargarPacientes() {
   db.collection("pacientes").get().then((querySnapshot) => {
 
-    state.pacientes = []; // limpiamos
+    if (querySnapshot.empty) return;
+    state.pacientes = []; // limpiamos solo si Firebase trae datos
 
     querySnapshot.forEach((doc) => {
       state.pacientes.push({
@@ -877,6 +1046,8 @@ function cargarPacientes() {
     });
 
     console.log("Pacientes cargados:", state.pacientes);
+    normalizeStateCounters();
+    saveAppData();
 
     renderPacientes(); // usa tu función actual
   });
@@ -972,6 +1143,11 @@ window.addEventListener('load', () => {
     document.getElementById('loginUser').value = savedUser;
   }
 });
+window.addEventListener('load', () => {
+  restoreOneDriveFolderConnection(false).then((connected) => {
+    if (connected) writeOneDriveBackup(false);
+  });
+});
 // ⏱️ AUTO LOGOUT POR INACTIVIDAD (30 min)
 let inactivityTimer;
 
@@ -992,7 +1168,8 @@ function resetTimer() {
 // ── NAV ───────────────────────────────────────────
 const pageTitles = {
   dashboard:'Panel Principal', pacientes:'Pacientes', historias:'Historias Clínicas',
-  agenda:'Agenda', asistente:'Asistente IA', recordatorios:'Recordatorios', redes:'Redes Sociales'
+  agenda:'Agenda', asistente:'Asistente IA', recordatorios:'Recordatorios', redes:'Redes Sociales',
+  respaldos:'Respaldos'
 };
 function goTo(page) {
   currentPage = page;
@@ -1000,7 +1177,7 @@ function goTo(page) {
   const nav = document.getElementById('nav-' + page);
   if (nav) nav.classList.add('active');
   document.getElementById('pageTitle').textContent = pageTitles[page] || page;
-  const renders = { dashboard:renderDashboard, pacientes:renderPacientes, historias:renderHistorias, agenda:renderAgenda, asistente:renderAsistente, recordatorios:renderRecordatorios, redes:renderRedes };
+  const renders = { dashboard:renderDashboard, pacientes:renderPacientes, historias:renderHistorias, agenda:renderAgenda, asistente:renderAsistente, recordatorios:renderRecordatorios, redes:renderRedes, respaldos:renderRespaldos };
   if (renders[page]) renders[page]();
 }
 
@@ -1168,6 +1345,8 @@ function guardarPaciente() {
 
       // (opcional) también guardarlo localmente para ver rápido
       state.pacientes.push({ id: Date.now(), ...paciente });
+      normalizeStateCounters();
+      saveAppData({ backupToFolder:true });
 
       closeModal('modalPaciente');
 
@@ -1178,7 +1357,12 @@ function guardarPaciente() {
     })
     .catch((error) => {
       console.error("Error guardando:", error);
-      alert("Error al guardar en la nube");
+      state.pacientes.push({ id: Date.now(), ...paciente });
+      normalizeStateCounters();
+      saveAppData({ backupToFolder:true });
+      closeModal('modalPaciente');
+      renderPacientes();
+      alert("No se pudo guardar en la nube, pero el paciente quedo guardado en el respaldo local.");
     });
 }
 // ── HISTORIAS ─────────────────────────────────────
@@ -1221,6 +1405,7 @@ function guardarHistoria() {
   const pid = parseInt(document.getElementById('hPaciente').value);
   if (!pid) { alert('Seleccione un paciente.'); return; }
   state.historias.push({ id:state.nextHistId++, pacienteId:pid, fecha:document.getElementById('hFecha').value, motivo:document.getElementById('hMotivo').value, diagnostico:document.getElementById('hDiagnostico').value, anamnesis:document.getElementById('hAnamnesis').value, ta:document.getElementById('hTA').value, fc:document.getElementById('hFC').value, temp:document.getElementById('hTemp').value, peso:document.getElementById('hPeso').value, sat:document.getElementById('hSat').value, tratamiento:document.getElementById('hTratamiento').value, obs:document.getElementById('hObs').value });
+  saveAppData({ backupToFolder:true });
   closeModal('modalHistoria');
   renderHistorias();
 }
@@ -1312,11 +1497,42 @@ function guardarCita() {
   const pid = parseInt(document.getElementById('cPaciente').value);
   if (!pid) { alert('Seleccione un paciente.'); return; }
   state.citas.push({ id:state.nextCitaId++, pacienteId:pid, fecha:document.getElementById('cFecha').value, hora:document.getElementById('cHora').value||'08:00', tipo:document.getElementById('cTipo').value, notas:document.getElementById('cNotas').value, estado:'pendiente' });
+  saveAppData({ backupToFolder:true });
   closeModal('modalCita');
   renderAgenda();
 }
-function confirmarCita(id) { const c = state.citas.find(x => x.id===id); if(c) c.estado='confirmada'; renderAgenda(); }
+function confirmarCita(id) { const c = state.citas.find(x => x.id===id); if(c) c.estado='confirmada'; saveAppData({ backupToFolder:true }); renderAgenda(); }
 
+function renderRespaldos() {
+  setC(`
+<div class="card">
+  <div class="cardTitle">💾 Respaldo de datos</div>
+  <p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:1rem">
+    Los datos se guardan automaticamente en este navegador. Para respaldo automático en OneDrive desde esta PC, seleccione una vez la carpeta local sincronizada con OneDrive usando "Conectar carpeta local".
+  </p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem">
+    <button class="btn btn-primary" onclick="downloadBackup()">Descargar respaldo JSON</button>
+    <button class="btn btn-outline" onclick="openOneDriveWebFolder()">Abrir carpeta OneDrive</button>
+    <label class="btn btn-outline" style="justify-content:center;cursor:pointer">
+      Importar respaldo
+      <input type="file" accept="application/json,.json" onchange="importBackup(this)" style="display:none">
+    </label>
+    <button class="btn btn-outline" onclick="connectOneDriveFolder()">Conectar carpeta local</button>
+  </div>
+  <div style="font-size:12px;color:#888;line-height:1.6;margin-top:1rem">
+    Nota: si selecciona una carpeta dentro de OneDrive en Windows, la app escribira automaticamente el archivo clinica-dr-allan-leal-respaldo.json y OneDrive lo sincronizara. El enlace web solo abre la carpeta en linea; escribir directamente a ese link requiere una integracion avanzada con Microsoft Graph.
+  </div>
+</div>
+<div class="card">
+  <div class="cardTitle">Resumen incluido en el respaldo</div>
+  <div class="statGrid">
+    <div class="statBox"><div class="statNum">${state.pacientes.length}</div><div class="statLbl">Pacientes</div></div>
+    <div class="statBox"><div class="statNum">${state.historias.length}</div><div class="statLbl">Historias</div></div>
+    <div class="statBox"><div class="statNum">${state.citas.length}</div><div class="statLbl">Citas</div></div>
+    <div class="statBox"><div class="statNum">${state.posts.length}</div><div class="statLbl">Posts</div></div>
+  </div>
+</div>`);
+}
 // ── ASISTENTE IA ──────────────────────────────────
 function renderAsistente() {
   setC(`
@@ -1395,6 +1611,7 @@ async function sendChat() {
   } catch(e) {
     state.chatHistory.push({ role:'ai', text:'Actualmente no hay conexión con el servidor de IA. Verifique su conexión a internet e intente de nuevo.' });
   }
+  saveAppData({ backupToFolder:true });
   if (document.getElementById('chatBox')) { document.getElementById('chatBox').innerHTML = renderMsgs(); scrollChat(); }
 }
 
@@ -1531,6 +1748,7 @@ async function generarPost() {
 }
 function guardarPost() {
   state.posts.unshift({ id:state.nextPostId++, plataforma:postGenerado.plataforma, texto:postGenerado.texto, fecha:new Date().toISOString().split('T')[0], estado:'borrador' });
+  saveAppData({ backupToFolder:true });
   document.getElementById('postPreview').style.display = 'none';
   switchTabR(document.querySelector('.tabBar .tab'), 'tabPosts');
   renderRedes();
@@ -1543,7 +1761,7 @@ function copiarPost(id) {
   alert('✅ Post copiado al portapapeles.');
 }
 function eliminarPost(id) {
-  if (confirm('¿Desea eliminar esta publicación?')) { state.posts = state.posts.filter(x => x.id!==id); renderRedes(); }
+  if (confirm('¿Desea eliminar esta publicación?')) { state.posts = state.posts.filter(x => x.id!==id); saveAppData({ backupToFolder:true }); renderRedes(); }
 }
 </script>
 </body>
