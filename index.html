@@ -1089,6 +1089,9 @@ let cloudSyncStarting = false;
 let cloudSyncReady = false;
 let isApplyingCloudState = false;
 let cloudSaveTimer = null;
+let cloudRetryTimer = null;
+let cloudHasUnsavedChanges = false;
+let cloudInitialStateApplied = false;
 let lastCloudStateJson = '';
 let occCloudUnsubscribe = null;
 let occCloudSyncStarting = false;
@@ -1506,12 +1509,15 @@ async function uploadHistoriaAttachments(historia, previous = []) {
   return adjuntos;
 }
 
-function notifyCloudSyncError(error) {
-  console.warn('Sincronización en tiempo real no disponible.', error);
-  if (cloudSyncErrorNotified) return;
+const cloudSyncErrorAreas = new Set();
+
+function notifyCloudSyncError(error, area = 'General') {
+  console.warn(`Sincronización en tiempo real no disponible (${area}).`, error);
+  if (cloudSyncErrorNotified && cloudSyncErrorAreas.has(area)) return;
   cloudSyncErrorNotified = true;
-  const detail = error?.code || error?.message || 'error desconocido';
-  setTimeout(() => alert(`No se pudo sincronizar en tiempo real con Firebase. Detalle: ${detail}. Los datos se guardaron localmente, pero otros usuarios no verán los cambios hasta corregir reglas/conexión de Firebase.`), 100);
+  cloudSyncErrorAreas.add(area);
+  const detail = [error?.code, error?.message].filter(Boolean).join(': ').slice(0, 300) || 'error desconocido';
+  setTimeout(() => alert(`No se pudo sincronizar en tiempo real con Firebase (${area}). Detalle: ${detail}. Los datos se guardaron localmente, pero otros usuarios no verán los cambios hasta corregir reglas/conexión de Firebase.`), 100);
 }
 
 async function ensureFirebaseSession() {
@@ -1653,6 +1659,7 @@ function startPatientCollectionSync() {
 
 function queueCloudSave() {
   if (isApplyingCloudState || !cloudSyncReady || !currentUser) return;
+  cloudHasUnsavedChanges = true;
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer = setTimeout(saveStateToCloud, 450);
 }
@@ -1664,7 +1671,7 @@ async function saveStateToCloud(force = false) {
     normalizeStateCounters();
     const shared = sharedCloudState();
     const stateJson = JSON.stringify(shared);
-    if (!force && stateJson === lastCloudStateJson) return;
+    if (!force && stateJson === lastCloudStateJson) { cloudHasUnsavedChanges = false; return; }
     if (new Blob([stateJson]).size > CLOUD_DOC_SAFE_BYTES) {
       throw new Error('Los datos de historias/citas superan el tamaño máximo de un documento de Firebase (1 MB).');
     }
@@ -1678,10 +1685,22 @@ async function saveStateToCloud(force = false) {
     });
     // Solo se marca como guardado cuando Firebase confirma; si falla, el siguiente cambio reintenta.
     lastCloudStateJson = stateJson;
+    if (JSON.stringify(sharedCloudState()) === stateJson) cloudHasUnsavedChanges = false;
     cloudSyncErrorNotified = false;
   } catch (e) {
-    notifyCloudSyncError(e);
+    // Si Firebase rechaza la escritura, los cambios locales se conservan y se reintenta.
+    notifyCloudSyncError(e, 'Historias y citas');
+    clearTimeout(cloudRetryTimer);
+    cloudRetryTimer = setTimeout(() => { if (cloudHasUnsavedChanges) saveStateToCloud(true); }, 15000);
   }
+}
+
+// Une dos listas por id: lo local gana, para no perder lo que todavía no llegó a Firebase.
+function mergeListById(remoteList, localList) {
+  const merged = new Map();
+  (Array.isArray(remoteList) ? remoteList : []).forEach(item => merged.set(String(item.id), item));
+  (Array.isArray(localList) ? localList : []).forEach(item => merged.set(String(item.id), item));
+  return Array.from(merged.values());
 }
 
 function occupationalCloudPayload() {
@@ -1704,6 +1723,11 @@ function cloneOccupationalPayloadWithoutRecords(payload) {
     ...emp,
     registros:[]
   }));
+  // registros/scans/fileIndex de primer nivel son copias de la empresa activa (ensureOcupacionalState los
+  // reconstruye). Subirlos duplicaba los 419 registros en el documento principal y pasaba de 1 MB.
+  occ.registros = [];
+  occ.scans = [];
+  occ.fileIndex = [];
   clean.ocupacional = occ;
   return clean;
 }
@@ -1874,6 +1898,14 @@ async function saveOccupationalStateToCloud(force = false) {
     const payloadJson = JSON.stringify(payload);
     if (!force && payloadJson === lastOccCloudStateJson) return true;
     const cloudPackage = buildOccupationalCloudPackage(payload);
+    const mainBytes = new Blob([JSON.stringify(cloudPackage.main)]).size;
+    if (mainBytes > CLOUD_DOC_SAFE_BYTES) {
+      throw new Error(`El documento principal de Salud Ocupacional pesa ${Math.round(mainBytes / 1024)} KB y Firebase acepta hasta 1024 KB (escáneres o planes demasiado grandes).`);
+    }
+    const bigChunk = cloudPackage.chunks.find(chunk => new Blob([JSON.stringify(chunk)]).size > CLOUD_DOC_SAFE_BYTES);
+    if (bigChunk) {
+      throw new Error(`El bloque ${bigChunk.index + 1} de registros ocupacionales pasa de 1 MB, probablemente por fotos de doping muy pesadas.`);
+    }
     await writeOccupationalRecordChunks(cloudPackage.chunks);
     await occupationalCloudDocRef().set({
       app:'ClinicaDrAllanLeal',
@@ -1890,8 +1922,8 @@ async function saveOccupationalStateToCloud(force = false) {
   } catch (e) {
     console.warn('Sincronización ocupacional no disponible.', e);
     if (e && e.code) console.warn('Código Firebase ocupacional:', e.code, e.message);
-    occCloudStatus = { state:'error', message:`No se pudo subir/leer Firebase: ${e.code || e.message || 'error desconocido'}.` };
-    notifyCloudSyncError(e);
+    occCloudStatus = { state:'error', message:`No se pudo subir/leer Firebase: ${[e.code, e.message].filter(Boolean).join(': ').slice(0, 300) || 'error desconocido'}.` };
+    notifyCloudSyncError(e, 'Salud Ocupacional');
     return false;
   }
 }
@@ -2013,7 +2045,12 @@ function applyCloudState(remoteState) {
   // Pacientes y Salud Ocupacional tienen su propia sincronización; se ignoran copias viejas del documento compartido.
   remoteState = { ...remoteState };
   CLOUD_SHARED_STATE_EXCLUDED_KEYS.forEach(key => { delete remoteState[key]; });
-  lastCloudStateJson = JSON.stringify(stripUndefinedForFirestore(remoteState));
+  if (cloudHasUnsavedChanges) {
+    // Hay cambios locales sin confirmar: un snapshot (incluida la reversión de una escritura rechazada) no los borra.
+    if (cloudInitialStateApplied) return;
+    ['historias', 'citas', 'posts'].forEach(key => { remoteState[key] = mergeListById(remoteState[key], state[key]); });
+  }
+  cloudInitialStateApplied = true;
   isApplyingCloudState = true;
   const currentOcupacional = state.ocupacional;
   const currentPlanesSSO = state.planesSSO;
@@ -2025,9 +2062,10 @@ function applyCloudState(remoteState) {
     state.nextPlanSSOId = currentNextPlanSSOId;
   }
   normalizeStateCounters();
-  lastCloudStateJson = JSON.stringify(state);
   localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(backupPayload()));
   isApplyingCloudState = false;
+  if (cloudHasUnsavedChanges) queueCloudSave();
+  else lastCloudStateJson = JSON.stringify(sharedCloudState());
   if (currentUser) refreshCurrentViewAfterCloudSync();
 }
 
@@ -2709,6 +2747,9 @@ async function doLogout() {
   if (patientCollectionUnsubscribe) { patientCollectionUnsubscribe(); patientCollectionUnsubscribe = null; }
   if (occCloudUnsubscribe) { occCloudUnsubscribe(); occCloudUnsubscribe = null; }
   cloudSyncStarting = false;
+  cloudInitialStateApplied = false;
+  cloudHasUnsavedChanges = false;
+  clearTimeout(cloudRetryTimer);
   patientCollectionStarting = false;
   occCloudSyncStarting = false;
   occCloudLoaded = false;
