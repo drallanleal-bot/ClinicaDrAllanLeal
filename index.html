@@ -23095,6 +23095,15 @@ function notifyCloudSyncError(error) {
 async function ensureFirebaseSession() {
   if (!auth) throw new Error('Firebase Authentication no está disponible.');
   if (auth.currentUser) return auth.currentUser;
+  // Al recargar la página Firebase restaura la sesión de forma asíncrona: esperamos el primer aviso.
+  if (!firebaseSessionPromise) {
+    firebaseSessionPromise = new Promise(resolve => {
+      const unsubscribe = auth.onAuthStateChanged(user => { unsubscribe(); resolve(user); });
+    });
+  }
+  const user = await firebaseSessionPromise;
+  firebaseSessionPromise = null;
+  if (user) return user;
   throw new Error('No hay una sesión activa de Firebase. Inicie sesión nuevamente.');
 }
 
@@ -23109,6 +23118,19 @@ async function saveAppData(options = {}) {
 
 function cloudDocRef() {
   return db.collection(CLOUD_SYNC_COLLECTION).doc(CLOUD_SYNC_DOC);
+}
+
+// Firestore rechaza documentos de más de 1 MiB. El estado compartido solo lleva lo que no
+// tiene sincronización propia: pacientes van uno por documento y Salud Ocupacional va por bloques.
+const CLOUD_SHARED_STATE_EXCLUDED_KEYS = ['pacientes', 'ocupacional', 'planesSSO', 'nextPlanSSOId', 'chatHistory'];
+const CLOUD_DOC_SAFE_BYTES = 900 * 1024;
+
+function sharedCloudState(source = state) {
+  const shared = {};
+  Object.keys(source || {}).forEach(key => {
+    if (!CLOUD_SHARED_STATE_EXCLUDED_KEYS.includes(key)) shared[key] = source[key];
+  });
+  return stripUndefinedForFirestore(JSON.parse(JSON.stringify(shared)));
 }
 
 function occupationalCloudDocRef() {
@@ -23197,7 +23219,9 @@ function startPatientCollectionSync() {
       syncLocalPatientsToCloud();
     }
   }, (error) => {
-    console.warn('Sincronización general no disponible. Se usará sincronización individual donde aplique.', error);
+    patientCollectionUnsubscribe = null;
+    patientCollectionStarting = false;
+    notifyCloudSyncError(error);
   });
   }).catch((error) => {
     patientCollectionStarting = false;
@@ -23216,19 +23240,25 @@ async function saveStateToCloud(force = false) {
   try {
     await ensureFirebaseSession();
     normalizeStateCounters();
-    const stateJson = JSON.stringify(state);
+    const shared = sharedCloudState();
+    const stateJson = JSON.stringify(shared);
     if (!force && stateJson === lastCloudStateJson) return;
-    lastCloudStateJson = stateJson;
+    if (new Blob([stateJson]).size > CLOUD_DOC_SAFE_BYTES) {
+      throw new Error('Los datos de historias/citas superan el tamaño máximo de un documento de Firebase (1 MB).');
+    }
+    // Sin merge: reemplaza el documento completo para borrar campos viejos (pacientes, ocupacional) que lo inflaban.
     await cloudDocRef().set({
       app:'ClinicaDrAllanLeal',
-      version:2,
-      state,
+      version:3,
+      state: shared,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: currentUser.name || currentUser.username || 'Usuario'
-    }, { merge:true });
+    });
+    // Solo se marca como guardado cuando Firebase confirma; si falla, el siguiente cambio reintenta.
+    lastCloudStateJson = stateJson;
     cloudSyncErrorNotified = false;
   } catch (e) {
-    console.warn('Sincronización general no disponible. Se usará sincronización individual donde aplique.', e);
+    notifyCloudSyncError(e);
   }
 }
 
@@ -23549,6 +23579,10 @@ function applyCloudState(remoteState) {
     saveStateToCloud(true);
     return;
   }
+  // Pacientes y Salud Ocupacional tienen su propia sincronización; se ignoran copias viejas del documento compartido.
+  remoteState = { ...remoteState };
+  CLOUD_SHARED_STATE_EXCLUDED_KEYS.forEach(key => { delete remoteState[key]; });
+  lastCloudStateJson = JSON.stringify(stripUndefinedForFirestore(remoteState));
   isApplyingCloudState = true;
   const currentOcupacional = state.ocupacional;
   const currentPlanesSSO = state.planesSSO;
@@ -23658,7 +23692,9 @@ function startRealtimeSync() {
       else console.warn('Sin documento compartido todavía. Esperando a que un usuario con datos reales sincronice primero.');
     }
   }, (error) => {
-    console.warn('Sincronización general no disponible. Se usará sincronización individual donde aplique.', error);
+    cloudUnsubscribe = null;
+    cloudSyncStarting = false;
+    notifyCloudSyncError(error);
   });
   }).catch((error) => {
     cloudSyncStarting = false;
