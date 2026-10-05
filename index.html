@@ -1509,12 +1509,15 @@ async function uploadHistoriaAttachments(historia, previous = []) {
   return adjuntos;
 }
 
-function notifyCloudSyncError(error) {
-  console.warn('Sincronización en tiempo real no disponible.', error);
-  if (cloudSyncErrorNotified) return;
+const cloudSyncErrorAreas = new Set();
+
+function notifyCloudSyncError(error, area = 'General') {
+  console.warn(`Sincronización en tiempo real no disponible (${area}).`, error);
+  if (cloudSyncErrorNotified && cloudSyncErrorAreas.has(area)) return;
   cloudSyncErrorNotified = true;
-  const detail = error?.code || error?.message || 'error desconocido';
-  setTimeout(() => alert(`No se pudo sincronizar en tiempo real con Firebase. Detalle: ${detail}. Los datos se guardaron localmente, pero otros usuarios no verán los cambios hasta corregir reglas/conexión de Firebase.`), 100);
+  cloudSyncErrorAreas.add(area);
+  const detail = [error?.code, error?.message].filter(Boolean).join(': ').slice(0, 300) || 'error desconocido';
+  setTimeout(() => alert(`No se pudo sincronizar en tiempo real con Firebase (${area}). Detalle: ${detail}. Los datos se guardaron localmente, pero otros usuarios no verán los cambios hasta corregir reglas/conexión de Firebase.`), 100);
 }
 
 async function ensureFirebaseSession() {
@@ -1686,7 +1689,7 @@ async function saveStateToCloud(force = false) {
     cloudSyncErrorNotified = false;
   } catch (e) {
     // Si Firebase rechaza la escritura, los cambios locales se conservan y se reintenta.
-    notifyCloudSyncError(e);
+    notifyCloudSyncError(e, 'Historias y citas');
     clearTimeout(cloudRetryTimer);
     cloudRetryTimer = setTimeout(() => { if (cloudHasUnsavedChanges) saveStateToCloud(true); }, 15000);
   }
@@ -1720,6 +1723,11 @@ function cloneOccupationalPayloadWithoutRecords(payload) {
     ...emp,
     registros:[]
   }));
+  // registros/scans/fileIndex de primer nivel son copias de la empresa activa (ensureOcupacionalState los
+  // reconstruye). Subirlos duplicaba los 419 registros en el documento principal y pasaba de 1 MB.
+  occ.registros = [];
+  occ.scans = [];
+  occ.fileIndex = [];
   clean.ocupacional = occ;
   return clean;
 }
@@ -1890,6 +1898,14 @@ async function saveOccupationalStateToCloud(force = false) {
     const payloadJson = JSON.stringify(payload);
     if (!force && payloadJson === lastOccCloudStateJson) return true;
     const cloudPackage = buildOccupationalCloudPackage(payload);
+    const mainBytes = new Blob([JSON.stringify(cloudPackage.main)]).size;
+    if (mainBytes > CLOUD_DOC_SAFE_BYTES) {
+      throw new Error(`El documento principal de Salud Ocupacional pesa ${Math.round(mainBytes / 1024)} KB y Firebase acepta hasta 1024 KB (escáneres o planes demasiado grandes).`);
+    }
+    const bigChunk = cloudPackage.chunks.find(chunk => new Blob([JSON.stringify(chunk)]).size > CLOUD_DOC_SAFE_BYTES);
+    if (bigChunk) {
+      throw new Error(`El bloque ${bigChunk.index + 1} de registros ocupacionales pasa de 1 MB, probablemente por fotos de doping muy pesadas.`);
+    }
     await writeOccupationalRecordChunks(cloudPackage.chunks);
     await occupationalCloudDocRef().set({
       app:'ClinicaDrAllanLeal',
@@ -1906,8 +1922,8 @@ async function saveOccupationalStateToCloud(force = false) {
   } catch (e) {
     console.warn('Sincronización ocupacional no disponible.', e);
     if (e && e.code) console.warn('Código Firebase ocupacional:', e.code, e.message);
-    occCloudStatus = { state:'error', message:`No se pudo subir/leer Firebase: ${e.code || e.message || 'error desconocido'}.` };
-    notifyCloudSyncError(e);
+    occCloudStatus = { state:'error', message:`No se pudo subir/leer Firebase: ${[e.code, e.message].filter(Boolean).join(': ').slice(0, 300) || 'error desconocido'}.` };
+    notifyCloudSyncError(e, 'Salud Ocupacional');
     return false;
   }
 }
