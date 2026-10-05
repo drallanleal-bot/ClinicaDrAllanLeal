@@ -1875,8 +1875,102 @@ function renderOccCloudStatus() {
       <div style="margin-top:.25rem;font-size:.86rem;color:#667085">Versión de sincronización: ${escapeHtml(OCC_FIREBASE_SYNC_VERSION)}</div>
       <div style="margin-top:.25rem">Datos en esta pantalla: ${counts.registros} registro(s), ${counts.scans} escáner(es), ${counts.planes} plan(es).</div>
     </div>
-    <button class="btn btn-sm btn-outline" onclick="refreshOccupationalFromCloud(true)">Actualizar desde Firebase</button>
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+      <button class="btn btn-sm btn-outline" onclick="refreshOccupationalFromCloud(true)">Actualizar desde Firebase</button>
+      ${isAdminUser() ? `<button class="btn btn-sm btn-outline" onclick="recoverOccupationalRecordsFromCloud()">Recuperar registros de Firebase</button>
+      <label class="btn btn-sm btn-outline" style="cursor:pointer">Importar registros (JSON)<input type="file" accept="application/json,.json" onchange="importOccupationalRecordsFile(this)" style="display:none"></label>` : ''}
+    </div>
   </div>`;
+}
+
+// Recuperación: une registros sin borrar nada. Si un registro ya existe, se conservan sus datos y solo se llenan campos vacíos.
+function mergeRecoveredOcupRegistros(items) {
+  ensureOcupacionalState();
+  let added = 0;
+  let filled = 0;
+  items.forEach(({ empresa, registro }) => {
+    if (!registro) return;
+    const nombreEmpresa = empresa || 'TROPIGAS';
+    let emp = state.ocupacional.empresas.find(e => e.nombre === nombreEmpresa);
+    if (!emp) {
+      emp = { nombre:nombreEmpresa, plantas:[], registros:[], scans:[], fileIndex:[], nextRegistroId:1, nextScanId:1 };
+      state.ocupacional.empresas.push(emp);
+    }
+    emp.registros = Array.isArray(emp.registros) ? emp.registros : [];
+    const idx = findOcupRegistroIndex(emp.registros, registro);
+    if (idx >= 0) {
+      emp.registros[idx] = mergeOcupRegistro(registro, emp.registros[idx]);
+      filled += 1;
+    } else {
+      emp.registros.push({ ...registro });
+      added += 1;
+    }
+  });
+  dedupeAllOcupacionalRegistros();
+  ensureOcupacionalState();
+  normalizeStateCounters();
+  return { added, filled };
+}
+
+function totalOcupRegistros() {
+  return (state.ocupacional.empresas || []).reduce((total, emp) => total + (emp.registros || []).length, 0);
+}
+
+async function finishOccupationalRecovery(result, origen) {
+  localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(backupPayload()));
+  const total = totalOcupRegistros();
+  refreshCurrentViewAfterCloudSync();
+  if (!result.added) {
+    alert(`${origen}: no se encontraron registros nuevos. Total en pantalla: ${total}.`);
+    return;
+  }
+  if (confirm(`${origen}: se agregaron ${result.added} registro(s). Total en pantalla: ${total}.\n\n¿Subir ahora los ${total} registros a Firebase?`)) {
+    occCloudLoaded = true;
+    const ok = await saveOccupationalStateToCloud(true);
+    alert(ok ? `Listo: ${total} registros guardados en Firebase.` : `No se pudo subir. Detalle: ${occCloudStatus.message || 'desconocido'}`);
+  }
+}
+
+async function recoverOccupationalRecordsFromCloud() {
+  if (!isAdminUser()) return;
+  try {
+    await ensureFirebaseSession();
+    const items = [];
+    let found = 0;
+    // Lee todos los bloques que existan, aunque el documento principal indique menos.
+    for (let index = 0; index < 50; index += 1) {
+      const snap = await db.collection(OCC_SYNC_COLLECTION).doc(occupationalRecordChunkDocId(index)).get({ source:'server' });
+      if (!snap.exists) continue;
+      found += 1;
+      (snap.data()?.items || []).forEach(item => items.push(item));
+    }
+    const result = mergeRecoveredOcupRegistros(items);
+    await finishOccupationalRecovery(result, `Bloques leídos en Firebase: ${found}`);
+  } catch (e) {
+    alert(`No se pudieron leer los bloques de Firebase: ${[e.code, e.message].filter(Boolean).join(': ')}`);
+  }
+}
+
+function importOccupationalRecordsFile(input) {
+  if (!isAdminUser()) return;
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const list = Array.isArray(data) ? data : (data.registros || data.records || []);
+      if (!Array.isArray(list) || !list.length) throw new Error('El archivo no trae registros.');
+      const items = list.map(registro => ({ empresa:registro.empresa || 'TROPIGAS', registro }));
+      const result = mergeRecoveredOcupRegistros(items);
+      await finishOccupationalRecovery(result, `Archivo ${file.name}`);
+    } catch (e) {
+      alert(`No se pudo importar el archivo: ${e.message}`);
+    } finally {
+      input.value = '';
+    }
+  };
+  reader.readAsText(file);
 }
 
 function queueOccupationalCloudSave() {
