@@ -13,10 +13,9 @@ Para que GitHub Pages muestre la pagina correctamente:
    - `ALLAN2 (1).jpeg`
 4. No pegues el contenido HTML dentro de `README.md`; GitHub Pages necesita leer el archivo `index.html`.
 
-## Usuarios de prueba
+## Acceso
 
-- Usuario: `doctor`
-- Contrasena: `1234`
+Los usuarios se crean en Firebase Authentication y necesitan un documento en Firestore > `usuarios` con su UID, `active: true` y su `role`.
 
 ## Cambios incluidos
 
