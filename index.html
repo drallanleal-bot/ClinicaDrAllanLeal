@@ -5065,22 +5065,6 @@ async function sendChat() {
   state.chatHistory.push({ role:'ai', text:generarRespuestaMediBotLocal(text) });
   saveAppData({ backupToFolder:true });
   if (document.getElementById('chatBox')) { document.getElementById('chatBox').innerHTML = renderMsgs(); scrollChat(); }
-  return;
-
-  const pacCtx   = state.pacientes.map(p => `${p.nombre} (${calcEdad(p.nac)}, ${p.sexo}${p.alergias&&p.alergias!=='Ninguna'?', alergia: '+p.alergias:''})`).join('; ');
-  const citasCtx = state.citas.map(c => `${getPac(c.pacienteId).nombre}: ${fmtF(c.fecha)} ${c.hora} (${c.tipo}, ${c.estado})`).join('; ');
-  const sys = `Eres MediBot, el asistente de IA de un consultorio médico especialista en Guatemala. Contexto del consultorio:\n- Pacientes: ${pacCtx}\n- Próximas citas: ${citasCtx}\n\nTu rol: Ayudar al médico a redactar mensajes profesionales y cálidos para pacientes (WhatsApp), recordatorios de citas, instrucciones médicas, contenido para redes sociales (Facebook e Instagram) y responder consultas de salud generales. Responde SIEMPRE en español, de forma profesional, concisa y cálida. Para redes sociales incluye emojis apropiados y hashtags relevantes. Para mensajes de pacientes usa un tono cercano y empático.`;
-
-  try {
-    const res  = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, system:sys, messages:state.chatHistory.map(m => ({ role:m.role==='ai'?'assistant':'user', content:m.text })) }) });
-    const data = await res.json();
-    const reply = data.content?.[0]?.text || 'No pude procesar su solicitud.';
-    state.chatHistory.push({ role:'ai', text:reply });
-  } catch(e) {
-    state.chatHistory.push({ role:'ai', text:generarRespuestaMediBotLocal(text) });
-  }
-  saveAppData({ backupToFolder:true });
-  if (document.getElementById('chatBox')) { document.getElementById('chatBox').innerHTML = renderMsgs(); scrollChat(); }
 }
 
 // ── RECORDATORIOS ─────────────────────────────────
@@ -5240,14 +5224,8 @@ async function generarPost() {
   const instr = document.getElementById('instrAd').value;
   const btn   = document.getElementById('btnGenPost');
   btn.textContent = '⏳ Generando...'; btn.disabled = true;
-  const prompt = `Crea un post para ${red==='facebook'?'Facebook':'Instagram'} de un consultorio médico especialista en Guatemala sobre el tema: "${tema}". ${instr?'Instrucciones adicionales: '+instr+'.':''}\n\nEl post debe ser:\n- Educativo, profesional y cálido\n- Apropiado para un consultorio médico\n- Con emojis apropiados (no excesivos)\n- Con 3-5 hashtags relevantes al final\n- Entre 80-150 palabras\n\nResponde SOLO con el texto del post, sin explicaciones ni comillas alrededor.`;
-  try {
-    const res  = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:500, messages:[{role:'user',content:prompt}] }) });
-    const data = await res.json();
-    postGenerado = { plataforma:red, texto:data.content?.[0]?.text || 'Error al generar.' };
-  } catch(e) {
-    postGenerado = { plataforma:red, texto:`🌿 La salud es nuestro bien más preciado.\n\n${tema} es fundamental para mantener una vida plena y saludable. En nuestro consultorio estamos comprometidos con tu bienestar. 💚\n\nAgenda tu cita hoy y demos juntos el primer paso hacia una mejor salud.\n\n#Salud #Bienestar #ConsultorioMedico #Guatemala` };
-  }
+  // Sin servidor propio no hay conexión segura con una IA: se usa la plantilla local.
+  postGenerado = { plataforma:red, texto:`🌿 La salud es nuestro bien más preciado.\n\n${tema} es fundamental para mantener una vida plena y saludable. En nuestro consultorio estamos comprometidos con tu bienestar. 💚\n\nAgenda tu cita hoy y demos juntos el primer paso hacia una mejor salud.\n\n#Salud #Bienestar #ConsultorioMedico #Guatemala` };
   document.getElementById('postTextoPreview').textContent = postGenerado.texto;
   document.getElementById('postPreview').style.display = 'block';
   btn.textContent = '✨ Generar publicación'; btn.disabled = false;
