@@ -226,6 +226,16 @@ small,
 .topName{font-size:13px;opacity:.9}
 .btnOut{background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);color:white;padding:5px 12px;border-radius:7px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:.2s}
 .btnOut:hover{background:rgba(255,255,255,.25)}
+.syncPill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:white;font-family:'DM Sans',sans-serif;cursor:default;white-space:nowrap}
+.syncPill .syncDot{width:8px;height:8px;border-radius:50%;background:#7ee2a8;flex-shrink:0}
+.syncPill.saving .syncDot{background:#ffd166}
+.syncPill.offline .syncDot,.syncPill.error .syncDot{background:#ff6b6b}
+.syncPill.error{cursor:pointer;background:rgba(255,107,107,.28)}
+#toastBox{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;z-index:3000;pointer-events:none;width:max-content;max-width:calc(100vw - 32px)}
+.toast{background:#1f3b2f;color:white;padding:10px 16px;border-radius:8px;font-size:13.5px;line-height:1.45;box-shadow:0 6px 18px rgba(0,0,0,.2);white-space:pre-line;opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:none}
+.toast.error{background:#8a2c2c}
+@media(max-width:760px){.syncPill .syncText{display:none}.syncPill{padding:6px}}
 
 .layout{display:flex;flex:1;min-height:calc(100vh - 50px)}
 .sidebar{
@@ -780,6 +790,7 @@ tr:hover td{
 <!-- ══════════════════════════════════════════════════
      APP SHELL
 ══════════════════════════════════════════════════ -->
+<div id="toastBox" aria-live="polite"></div>
 <div id="app" style="display:none;flex-direction:column;min-height:100vh">
   <div class="topbar">
     <div class="brand">
@@ -789,6 +800,7 @@ tr:hover td{
 </div>
     <div class="moduleSwitch" id="moduleSwitch"></div>
     <div class="topRight">
+      <button type="button" class="syncPill" id="syncPill" onclick="showSyncDetails()" title="Estado de guardado en Firebase"><span class="syncDot"></span><span class="syncText">Guardado</span></button>
       <div class="avatar" id="topAvatar">DR</div>
       <span class="topName" id="topName">Doctor</span>
       <button class="btnOut" onclick="doLogout()">Salir</button>
@@ -1474,13 +1486,71 @@ async function uploadHistoriaAttachments(historia, previous = []) {
 
 const cloudSyncErrorAreas = new Set();
 
+// ── ESTADO DE GUARDADO Y AVISOS ───────────────────
+// Avisos breves que desaparecen solos, en lugar de ventanas que hay que cerrar.
+function showToast(message, type = 'ok', ms = 3500) {
+  const box = document.getElementById('toastBox');
+  if (!box) { alert(message); return; }
+  const el = document.createElement('div');
+  el.className = 'toast' + (type === 'error' ? ' error' : '');
+  el.textContent = message;
+  box.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); }, ms);
+}
+
+let syncPendingWrites = 0;
+const syncErrors = new Map();
+
+// Etiqueta de la barra superior: Guardado, Guardando…, Sin conexión o Error al guardar.
+function renderSyncPill() {
+  const pill = document.getElementById('syncPill');
+  if (!pill) return;
+  let kind = 'saved', text = 'Guardado';
+  if (!navigator.onLine) { kind = 'offline'; text = 'Sin conexión, se guardará al volver'; }
+  else if (syncErrors.size) { kind = 'error'; text = 'Error al guardar'; }
+  else if (syncPendingWrites > 0 || cloudHasUnsavedChanges) { kind = 'saving'; text = 'Guardando…'; }
+  pill.className = 'syncPill ' + kind;
+  pill.querySelector('.syncText').textContent = text;
+  pill.title = kind === 'error' ? 'Toque para ver qué pasó' : text;
+}
+
+async function trackCloudWrite(area, work) {
+  syncPendingWrites++;
+  renderSyncPill();
+  try {
+    const result = await work();
+    syncErrors.delete(area);
+    return result;
+  } finally {
+    syncPendingWrites = Math.max(0, syncPendingWrites - 1);
+    renderSyncPill();
+  }
+}
+
+function showSyncDetails() {
+  if (!syncErrors.size) return;
+  const lines = [...syncErrors].map(([area, detail]) => `• ${area}: ${detail}`).join('\n');
+  alert(`No se pudo guardar en Firebase:\n\n${lines}\n\nLos datos siguen guardados en este equipo y se vuelve a intentar solo.`);
+}
+
+window.addEventListener('offline', renderSyncPill);
+window.addEventListener('online', () => {
+  renderSyncPill();
+  if (!currentUser) return;
+  showToast('Conexión recuperada. Subiendo cambios…');
+  if (cloudHasUnsavedChanges) saveStateToCloud(true);
+});
+
 function notifyCloudSyncError(error, area = 'General') {
   console.warn(`Sincronización en tiempo real no disponible (${area}).`, error);
+  const detail = [error?.code, error?.message].filter(Boolean).join(': ').slice(0, 300) || 'error desconocido';
+  syncErrors.set(area, detail);
+  renderSyncPill();
   if (cloudSyncErrorNotified && cloudSyncErrorAreas.has(area)) return;
   cloudSyncErrorNotified = true;
   cloudSyncErrorAreas.add(area);
-  const detail = [error?.code, error?.message].filter(Boolean).join(': ').slice(0, 300) || 'error desconocido';
-  setTimeout(() => alert(`No se pudo sincronizar en tiempo real con Firebase (${area}). Detalle: ${detail}. Los datos se guardaron localmente, pero otros usuarios no verán los cambios hasta corregir reglas/conexión de Firebase.`), 100);
+  showToast(`No se pudo guardar en Firebase (${area}). Toque "Error al guardar" arriba para ver el detalle.`, 'error', 7000);
 }
 
 function warnIfCloudStateGrowing(bytes) {
@@ -1568,10 +1638,10 @@ async function savePatientToCloud(p) {
   if (!currentUser || isApplyingPatientCloudState) return;
   try {
     await ensureFirebaseSession();
-    await patientDocRef(p.id).set(patientCloudPayload(p), { merge:true });
+    await trackCloudWrite('Pacientes', () => patientDocRef(p.id).set(patientCloudPayload(p), { merge:true }));
     cloudSyncErrorNotified = false;
   } catch (e) {
-    notifyCloudSyncError(e);
+    notifyCloudSyncError(e, 'Pacientes');
   }
 }
 
@@ -1579,10 +1649,10 @@ async function deletePatientFromCloud(id) {
   if (!currentUser || isApplyingPatientCloudState) return;
   try {
     await ensureFirebaseSession();
-    await patientDocRef(id).delete();
+    await trackCloudWrite('Pacientes', () => patientDocRef(id).delete());
     cloudSyncErrorNotified = false;
   } catch (e) {
-    notifyCloudSyncError(e);
+    notifyCloudSyncError(e, 'Pacientes');
   }
 }
 
@@ -1634,6 +1704,7 @@ function startPatientCollectionSync() {
 function queueCloudSave() {
   if (isApplyingCloudState || !cloudSyncReady || !currentUser) return;
   cloudHasUnsavedChanges = true;
+  renderSyncPill();
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer = setTimeout(saveStateToCloud, 450);
 }
@@ -1645,23 +1716,24 @@ async function saveStateToCloud(force = false) {
     normalizeStateCounters();
     const shared = sharedCloudState();
     const stateJson = JSON.stringify(shared);
-    if (!force && stateJson === lastCloudStateJson) { cloudHasUnsavedChanges = false; return; }
+    if (!force && stateJson === lastCloudStateJson) { cloudHasUnsavedChanges = false; renderSyncPill(); return; }
     if (new Blob([stateJson]).size > CLOUD_DOC_SAFE_BYTES) {
       throw new Error('Los datos de historias/citas superan el tamaño máximo de un documento de Firebase (1 MB).');
     }
     // Sin merge: reemplaza el documento completo para borrar campos viejos (pacientes, ocupacional) que lo inflaban.
-    await cloudDocRef().set({
+    await trackCloudWrite('Historias y citas', () => cloudDocRef().set({
       app:'ClinicaDrAllanLeal',
       version:3,
       state: shared,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: currentUser.name || currentUser.username || 'Usuario'
-    });
+    }));
     // Solo se marca como guardado cuando Firebase confirma; si falla, el siguiente cambio reintenta.
     lastCloudStateJson = stateJson;
     warnIfCloudStateGrowing(new Blob([stateJson]).size);
     if (JSON.stringify(sharedCloudState()) === stateJson) cloudHasUnsavedChanges = false;
     cloudSyncErrorNotified = false;
+    renderSyncPill();
   } catch (e) {
     // Si Firebase rechaza la escritura, los cambios locales se conservan y se reintenta.
     notifyCloudSyncError(e, 'Historias y citas');
@@ -1975,15 +2047,17 @@ async function saveOccupationalStateToCloud(force = false) {
     if (bigChunk) {
       throw new Error(`El bloque ${bigChunk.index + 1} de registros ocupacionales pasa de 1 MB, probablemente por fotos de doping muy pesadas.`);
     }
-    await writeOccupationalRecordChunks(cloudPackage.chunks);
-    await occupationalCloudDocRef().set({
-      app:'ClinicaDrAllanLeal',
-      module:'SaludOcupacional',
-      version:1,
-      ...cloudPackage.main,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedBy: currentUser.name || currentUser.username || 'Usuario'
-    }, { merge:true });
+    await trackCloudWrite('Salud Ocupacional', async () => {
+      await writeOccupationalRecordChunks(cloudPackage.chunks);
+      await occupationalCloudDocRef().set({
+        app:'ClinicaDrAllanLeal',
+        module:'SaludOcupacional',
+        version:1,
+        ...cloudPackage.main,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedBy: currentUser.name || currentUser.username || 'Usuario'
+      }, { merge:true });
+    });
     lastOccCloudStateJson = payloadJson;
     cloudSyncErrorNotified = false;
     occCloudStatus = { state:'ok', message:`Última subida correcta. Registros: ${occupationalCloudCounts(payload).registros}. Bloques: ${cloudPackage.chunks.length}.` };
@@ -2017,7 +2091,7 @@ async function forceOccupationalCloudSync() {
     return;
   }
   const ok = await saveOccupationalStateToCloud(true);
-  if (ok) alert(`Sincronización ocupacional enviada a Firebase. Registros: ${registros}. Escáneres: ${scans}. Ahora INGSALANIC debería verlos al recargar.`);
+  if (ok) showToast(`Sincronización ocupacional enviada a Firebase. Registros: ${registros}. Escáneres: ${scans}. Ahora INGSALANIC debería verlos al recargar.`);
   else alert(`No se pudo sincronizar con Firebase. Detalle: ${occCloudStatus.message || 'Revise reglas/conexión e intente de nuevo.'}`);
 }
 
@@ -2059,7 +2133,7 @@ async function refreshOccupationalFromCloud(showAlert = false) {
     }
     await applyOccupationalCloudState(doc.data());
     const counts = occupationalCloudCounts(occupationalCloudPayload());
-    if (showAlert) alert(`Datos leídos desde Firebase. Registros: ${counts.registros}. Escáneres: ${counts.scans}.`);
+    if (showAlert) showToast(`Datos leídos desde Firebase. Registros: ${counts.registros}. Escáneres: ${counts.scans}.`);
     return true;
   } catch (e) {
     console.warn('No se pudo leer Firebase ocupacional manualmente.', e);
@@ -2344,7 +2418,7 @@ async function writeOneDriveBackup(showAlert = true) {
     await writable.close();
     await writeReadableClinicalBackup(false);
     await writeReadableOccupationalBackup(false);
-    if (showAlert) alert('Respaldo guardado en la carpeta seleccionada. Incluye el archivo técnico JSON, carpetas legibles por paciente y backups anuales de Salud Ocupacional.');
+    if (showAlert) showToast('Respaldo guardado en la carpeta seleccionada. Incluye el archivo técnico JSON, carpetas legibles por paciente y backups anuales de Salud Ocupacional.');
     return true;
   } catch (e) {
     console.warn('No se pudo escribir el respaldo.', e);
@@ -2520,7 +2594,7 @@ async function writeReadableClinicalBackup(showAlert = false) {
       indexRows.push(`<tr><td>${escapeHtml(code)}</td><td>${escapeHtml(p.nombre)}</td><td>${hists.length}</td><td>${escapeHtml(p.tel || '')}</td></tr>`);
     }
     await writeTextToHandle(root, 'INDICE PACIENTES.html', `<!doctype html><html><head><meta charset="utf-8"><title>Índice pacientes</title><style>body{font-family:Arial,sans-serif;margin:28px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:8px;text-align:left}</style></head><body><h1>Índice de pacientes - Clínica Propia</h1><table><thead><tr><th>Código</th><th>Paciente</th><th>Historias</th><th>Teléfono</th></tr></thead><tbody>${indexRows.join('')}</tbody></table></body></html>`);
-    if (showAlert) alert('Respaldo legible de Clínica Propia guardado en OneDrive local.');
+    if (showAlert) showToast('Respaldo legible de Clínica Propia guardado en OneDrive local.');
     return true;
   } catch (e) {
     console.warn('No se pudo escribir el respaldo legible.', e);
@@ -2569,7 +2643,7 @@ async function writeReadableOccupationalBackup(showAlert = false) {
         await writeTextToHandle(backupDir, `INDICE_BACKUP_${year}.html`, `<!doctype html><html><head><meta charset="utf-8"><title>Backup ${escapeHtml(emp.nombre || '')} ${escapeHtml(year)}</title><style>body{font-family:Arial,sans-serif;margin:28px;color:#17211d}table{border-collapse:collapse;width:100%;margin:12px 0}td,th{border:1px solid #ddd;padding:7px;text-align:left}h1{color:#124734}.box{border:1px solid #ddd;border-radius:8px;padding:12px;margin:12px 0}</style></head><body><h1>Backup Salud Ocupacional ${escapeHtml(emp.nombre || '')} ${escapeHtml(year)}</h1><div class="box"><strong>Total registros:</strong> ${records.length}<br><strong>Aptos:</strong> ${apt['Apto'] || 0}<br><strong>Aptos con restricción:</strong> ${apt['Apto con restricción'] || 0}<br><strong>No aptos con restricción:</strong> ${apt['No apto con restricción'] || 0}<br><strong>No aptos:</strong> ${apt['No apto'] || 0}</div><h2>Registros por planta</h2><table><thead><tr><th>Planta</th><th>Registros</th></tr></thead><tbody>${plantRows}</tbody></table><h2>Registros EMOP</h2><table><thead><tr><th>Fecha</th><th>Planta</th><th>Expediente</th><th>Nombre</th><th>Puesto</th><th>Aptitud</th><th>IMC</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
       }
     }
-    if (showAlert) alert('Respaldo legible de Salud Ocupacional guardado en OneDrive local.');
+    if (showAlert) showToast('Respaldo legible de Salud Ocupacional guardado en OneDrive local.');
     return true;
   } catch (e) {
     console.warn('No se pudo escribir el respaldo ocupacional legible.', e);
@@ -2589,7 +2663,7 @@ function importBackup(input) {
       state = { ...state, ...data.state };
       normalizeStateCounters();
       saveAppData();
-      alert('Respaldo importado correctamente.');
+      showToast('Respaldo importado correctamente.');
       goTo(currentPage || 'dashboard');
     } catch (e) {
       alert('No se pudo importar el respaldo. Verifique que sea un archivo JSON válido de esta aplicación.');
@@ -2816,6 +2890,8 @@ async function doLogout() {
   cloudInitialStateApplied = false;
   cloudHasUnsavedChanges = false;
   clearTimeout(cloudRetryTimer);
+  syncErrors.clear();
+  renderSyncPill();
   patientCollectionStarting = false;
   occCloudSyncStarting = false;
   occCloudLoaded = false;
@@ -3624,7 +3700,7 @@ async function guardarOccCompanyOneDriveUrl() {
   company.oneDriveUrl = (document.getElementById('occCompanyOneDriveUrl')?.value || '').trim();
   await saveAppData({ backupToFolder:true });
   await saveOccupationalStateToCloud(true);
-  alert('Enlace de carpeta OneDrive actualizado para esta empresa.');
+  showToast('Enlace de carpeta OneDrive actualizado para esta empresa.');
   renderOcupEmpresas();
 }
 
@@ -4600,7 +4676,7 @@ async function guardarOcupacionalRegistro() {
   normalizeStateCounters();
   await saveAppData({ backupToFolder:true });
   await saveOccupationalStateToCloud(true);
-  alert(isEdit ? 'Evaluación ocupacional actualizada.' : 'Evaluación ocupacional guardada.');
+  showToast(isEdit ? 'Evaluación ocupacional actualizada.' : 'Evaluación ocupacional guardada.');
   renderOcupRegistros();
 }
 function editarOcupacionalRegistro(id) {
@@ -4725,7 +4801,7 @@ async function guardarOcupacionalEscaneres() {
       await saveAppData({ backupToFolder:true });
       await saveOccupationalStateToCloud(true);
       setOccScanSaveStatus('Escáner actualizado correctamente.', 100);
-      alert('Escáner actualizado.');
+      showToast('Escáner actualizado.');
       renderOcupEscaneres();
       return;
     }
@@ -4769,7 +4845,7 @@ async function guardarOcupacionalEscaneres() {
     await saveOccupationalStateToCloud(true);
     const multiLinkNotice = scanUrl && files.length > 1 ? ' El enlace directo no se asignó porque subió varios archivos; edite cada escáner para pegar su enlace individual.' : '';
     setOccScanSaveStatus('Escáneres guardados correctamente.', 100);
-    alert((oneDriveDirHandle ? `Escáneres guardados. ${synced}/${files.length} copiado(s) a la carpeta local de OneDrive.` : 'Escáneres indexados. Conecte carpeta local de OneDrive para copiar archivos automáticamente.') + ` Descarga directa lista: ${directReady}/${files.length}.` + multiLinkNotice);
+    showToast((oneDriveDirHandle ? `Escáneres guardados. ${synced}/${files.length} copiado(s) a la carpeta local de OneDrive.` : 'Escáneres indexados. Conecte carpeta local de OneDrive para copiar archivos automáticamente.') + ` Descarga directa lista: ${directReady}/${files.length}.` + multiLinkNotice);
     renderOcupEscaneres();
   } catch (e) {
     console.warn('No se pudo guardar el escáner.', e);
@@ -4868,7 +4944,7 @@ async function guardarPlanesSSO() {
   }
   normalizeStateCounters();
   await saveAppData({ backupToFolder:true });
-  alert(oneDriveDirHandle ? `Planes guardados. ${synced}/${files.length} copiado(s) a OneDrive local.` : 'Planes indexados. Conecte carpeta local de OneDrive para copiarlos automáticamente.');
+  showToast(oneDriveDirHandle ? `Planes guardados. ${synced}/${files.length} copiado(s) a OneDrive local.` : 'Planes indexados. Conecte carpeta local de OneDrive para copiarlos automáticamente.');
   renderPlanesSSO();
 }
 
@@ -4897,7 +4973,7 @@ async function indexarCarpetaOcupacional() {
     const allowed = files.filter(f => /\.(docx?|xlsx?|pdf|png|jpe?g)$/i.test(f.nombreArchivo));
     activeOccCompany().fileIndex = allowed.map((f, idx) => ({ id:idx+1, ...f, indexedAt:new Date().toISOString() }));
     saveAppData({ backupToFolder:true });
-    alert(`Índice creado: ${allowed.length} archivo(s) de Word, Excel, PDF o imagen.`);
+    showToast(`Índice creado: ${allowed.length} archivo(s) de Word, Excel, PDF o imagen.`);
     renderOcupDashboard();
   } catch (e) {
     if (e.name !== 'AbortError') alert('No se pudo indexar la carpeta seleccionada.');
@@ -4979,7 +5055,7 @@ function genRecordatorio(nombre, fecha, hora, tipo) {
   const msg = `📅 *Recordatorio de Cita Médica*\n\nEstimado/a *${nombre}*,\n\nLe recordamos que tiene una cita programada:\n\n🗓 Fecha: *${fecha}*\n⏰ Hora: *${hora}*\n🩺 Tipo: ${tipo}\n\nPor favor:\n• Llegue 10 minutos antes\n• Traiga su documento de identidad\n• Lleve exámenes o resultados previos si los tiene\n\nPara confirmar o cancelar su cita, escríbanos a este número.\n\n¡Le esperamos! 😊🏥`;
   navigator.clipboard && navigator.clipboard.writeText(msg).catch(() => {});
   const ta = document.createElement('textarea'); ta.value = msg; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-  alert('✅ Mensaje copiado al portapapeles.\n\nYa puede pegarlo en WhatsApp.');
+  showToast('✅ Mensaje copiado al portapapeles.\n\nYa puede pegarlo en WhatsApp.');
 }
 
 function openClinicWhatsApp(text = '') {
