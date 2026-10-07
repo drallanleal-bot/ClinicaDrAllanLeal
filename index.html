@@ -1520,6 +1520,14 @@ function notifyCloudSyncError(error, area = 'General') {
   setTimeout(() => alert(`No se pudo sincronizar en tiempo real con Firebase (${area}). Detalle: ${detail}. Los datos se guardaron localmente, pero otros usuarios no verán los cambios hasta corregir reglas/conexión de Firebase.`), 100);
 }
 
+function warnIfCloudStateGrowing(bytes) {
+  if (cloudSizeWarningShown || bytes < CLOUD_DOC_WARN_BYTES || !isAdminUser()) return;
+  cloudSizeWarningShown = true;
+  const kb = Math.round(bytes / 1024);
+  const pct = Math.round(bytes / (1024 * 1024) * 100);
+  setTimeout(() => alert(`Aviso preventivo: el archivo de historias y citas en Firebase ya mide ${kb} KB (${pct}% del límite de 1 MB). Todo se sigue guardando bien, pero conviene dividirlo pronto para que no se llene.`), 100);
+}
+
 async function ensureFirebaseSession() {
   if (!auth) throw new Error('Firebase Authentication no está disponible.');
   if (auth.currentUser) return auth.currentUser;
@@ -1552,6 +1560,9 @@ function cloudDocRef() {
 // tiene sincronización propia: pacientes van uno por documento y Salud Ocupacional va por bloques.
 const CLOUD_SHARED_STATE_EXCLUDED_KEYS = ['pacientes', 'ocupacional', 'planesSSO', 'nextPlanSSOId', 'chatHistory'];
 const CLOUD_DOC_SAFE_BYTES = 900 * 1024;
+// Aviso previo: al pasar de 700 KB se avisa al admin para dividir el documento antes de llegar al límite.
+const CLOUD_DOC_WARN_BYTES = 700 * 1024;
+let cloudSizeWarningShown = false;
 
 function sharedCloudState(source = state) {
   const shared = {};
@@ -1685,6 +1696,7 @@ async function saveStateToCloud(force = false) {
     });
     // Solo se marca como guardado cuando Firebase confirma; si falla, el siguiente cambio reintenta.
     lastCloudStateJson = stateJson;
+    warnIfCloudStateGrowing(new Blob([stateJson]).size);
     if (JSON.stringify(sharedCloudState()) === stateJson) cloudHasUnsavedChanges = false;
     cloudSyncErrorNotified = false;
   } catch (e) {
