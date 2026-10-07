@@ -12,6 +12,7 @@ Para que GitHub Pages muestre la pagina correctamente:
    - `ALLAN-logo (1).jpeg`
    - `ALLAN2 (1).jpeg`
 4. No pegues el contenido HTML dentro de `README.md`; GitHub Pages necesita leer el archivo `index.html`.
+5. Conserva las carpetas `css/` (estilos) y `js/` (código, un archivo por módulo). Si cambias alguno, sube el número `?v=` en `index.html` para que los navegadores carguen la versión nueva.
 
 ## Acceso
 
