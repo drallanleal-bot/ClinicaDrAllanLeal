@@ -326,31 +326,11 @@ tr:hover td{background:#fafaf8}
 .calNav button:hover{border-color:#aaa}
 .calNav h4{font-size:15px;font-weight:600;flex:1;text-align:center}
 
-/* Chat */
-.chatWrap{border:1.5px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:.75rem}
-.chatBox{height:330px;overflow-y:auto;padding:.9rem;background:#fafaf8;display:flex;flex-direction:column;gap:.6rem}
-.msg{display:flex;flex-direction:column}
-.msg.ai{align-items:flex-start}
-.msg.user{align-items:flex-end}
-.msgLabel{font-size:10.5px;color:#aaa;margin-bottom:3px;font-weight:500}
-.bubble{max-width:84%;padding:.6rem .9rem;border-radius:10px;font-size:13.5px;line-height:1.55;white-space:pre-wrap}
-.msg.ai .bubble{background:#e8f5ef;color:#0f4c2e;border-radius:2px 10px 10px 10px}
-.msg.user .bubble{background:var(--green);color:white;border-radius:10px 10px 2px 10px}
-.chatInputRow{display:flex;border-top:1.5px solid var(--border)}
-.chatInputRow input{flex:1;padding:10px 14px;border:none;outline:none;font-size:14px;font-family:'DM Sans',sans-serif;background:white}
-.chatInputRow button{background:var(--green);color:white;border:none;padding:10px 16px;cursor:pointer;font-size:18px;transition:.15s}
-.chatInputRow button:hover{background:var(--green-dark)}
-
 /* Tabs */
 .tabBar{display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--border)}
 .tab{padding:.55rem 1.1rem;border:none;background:none;cursor:pointer;font-size:13.5px;color:#888;border-bottom:2.5px solid transparent;margin-bottom:-2px;font-family:'DM Sans',sans-serif;transition:.15s;font-weight:500}
 .tab:hover{color:#444}
 .tab.active{color:var(--green);border-bottom-color:var(--green)}
-
-/* Post cards */
-.postCard{background:white;border:1.5px solid var(--border);border-radius:10px;padding:1rem;margin-bottom:.75rem}
-.postPlatform{display:flex;align-items:center;gap:.4rem;font-size:12px;font-weight:600;margin-bottom:.6rem;text-transform:uppercase;letter-spacing:.4px}
-.postText{font-size:13.5px;color:#333;line-height:1.6;background:#f8f8f6;border-radius:7px;padding:.7rem;margin-bottom:.6rem;white-space:pre-wrap}
 
 /* Search */
 .searchRow{display:flex;gap:.6rem;margin-bottom:1rem;align-items:center}
@@ -526,7 +506,6 @@ body{
 
 .card,
 .statBox,
-.postCard,
 .modal{
   border-radius:8px;
   box-shadow:var(--shadow);
@@ -584,18 +563,6 @@ tr:hover td{
   min-height:76px;
 }
 
-.chatBox{
-  background:#f7faf8;
-}
-
-.msg.ai .bubble{
-  background:#eaf6f0;
-}
-
-.msg.user .bubble{
-  background:linear-gradient(135deg,var(--green),var(--blue));
-}
-
 @media(max-width:760px){
   .topbar{
     gap:.75rem;
@@ -614,8 +581,7 @@ tr:hover td{
     padding:1rem;
   }
   .searchRow,
-  .modalActions,
-  .chatInputRow{
+  .modalActions{
     align-items:stretch;
     flex-direction:column;
   }
@@ -835,9 +801,7 @@ tr:hover td{
       <button class="navBtn" onclick="goTo('pacientes')" id="nav-pacientes"><span class="navIcon">👥</span><span class="navLabel">Pacientes</span></button>
       <button class="navBtn" onclick="goTo('historias')" id="nav-historias"><span class="navIcon">📋</span><span class="navLabel">Historias</span></button>
       <button class="navBtn" onclick="goTo('agenda')" id="nav-agenda"><span class="navIcon">📅</span><span class="navLabel">Agenda</span></button>
-      <button class="navBtn" onclick="goTo('asistente')" id="nav-asistente"><span class="navIcon">🤖</span><span class="navLabel">Asistente IA</span></button>
       <button class="navBtn" onclick="goTo('recordatorios')" id="nav-recordatorios"><span class="navIcon">🔔</span><span class="navLabel">Recordatorios</span></button>
-      <button class="navBtn" id="nav-redes" onclick="goTo('redes')"><span class="navIcon">📱</span><span class="navLabel">Redes Sociales</span></button>
       <button class="navBtn" id="nav-respaldos" onclick="goTo('respaldos')"><span class="navIcon">💾</span><span class="navLabel">Respaldos</span></button>
       <div class="sidebar-footer">
         <button class="navBtn" onclick="doLogout()"><span class="navIcon">🚪</span><span class="navLabel">Cerrar sesión</span></button>
@@ -1052,7 +1016,6 @@ let state = {
     { id:1, plataforma:'facebook',  texto:'🩺 ¿Sabías que el control médico regular puede prevenir complicaciones graves?\n\nEsta semana recordamos la importancia del chequeo anual. Agenda tu cita con nosotros. 💚\n\n#Salud #PrevencionEsMejor #ConsultorioMedico', fecha:'2025-04-14', estado:'publicado' },
     { id:2, plataforma:'instagram', texto:'✨ Cuida tu salud hoy para vivir mejor mañana.\n\nNuestro consultorio está listo para atenderte con la calidad y calidez que mereces. 🏥💚\n\n#ConsultorioMedico #TuSaludEsPrimero #Bienestar', fecha:'2025-04-14', estado:'publicado' }
   ],
-  chatHistory: [{ role:'ai', text:'¡Hola! Soy MediBot, su asistente de IA 🤖\n\nPuedo ayudarle a:\n• Redactar mensajes y recordatorios para pacientes\n• Crear contenido para Facebook e Instagram\n• Generar instrucciones de medicamentos\n• Responder consultas médicas generales\n\n¿En qué le ayudo hoy?' }],
   nextPacId:4, nextPacCode:4, nextHistId:3, nextCitaId:4, nextPostId:3,
   socialLinks:{ facebook:'', instagram:'', website:'', whatsapp:'+50238006697' },
   planesSSO:[],
@@ -2185,7 +2148,6 @@ function refreshCurrentViewAfterCloudSync() {
   else if (currentPage === 'historias') renderHistorias();
   else if (currentPage === 'agenda') renderAgenda();
   else if (currentPage === 'recordatorios') renderRecordatorios();
-  else if (currentPage === 'redes') renderRedes();
   else if (currentPage === 'respaldos') renderRespaldos();
   else if (currentPage === 'occEmpresas') renderOcupEmpresas();
   else if (currentPage === 'occDashboard') renderOcupDashboard();
@@ -2726,9 +2688,7 @@ function renderSidebar() {
     <button class="navBtn" onclick="goTo('pacientes')" id="nav-pacientes"><span class="navIcon">👥</span><span class="navLabel">Pacientes</span></button>
     <button class="navBtn" onclick="goTo('historias')" id="nav-historias"><span class="navIcon">📋</span><span class="navLabel">Historias</span></button>
     <button class="navBtn" onclick="goTo('agenda')" id="nav-agenda"><span class="navIcon">📅</span><span class="navLabel">Agenda</span></button>
-    <button class="navBtn" onclick="goTo('asistente')" id="nav-asistente"><span class="navIcon">🤖</span><span class="navLabel">Asistente IA</span></button>
     <button class="navBtn" onclick="goTo('recordatorios')" id="nav-recordatorios"><span class="navIcon">🔔</span><span class="navLabel">Recordatorios</span></button>
-    ${currentUser && currentUser.role === 'asist' ? '' : `<button class="navBtn" id="nav-redes" onclick="goTo('redes')"><span class="navIcon">📱</span><span class="navLabel">Redes Sociales</span></button>`}
     <button class="navBtn" id="nav-respaldos" onclick="goTo('respaldos')"><span class="navIcon">💾</span><span class="navLabel">Respaldos</span></button>
     <div class="sidebar-footer">
       <button class="navBtn" onclick="switchModule('ocupacional')"><span class="navIcon">🏭</span><span class="navLabel">Salud Ocupacional</span></button>
@@ -2921,7 +2881,7 @@ function resetTimer() {
 // ── NAV ───────────────────────────────────────────
 const pageTitles = {
   dashboard:'Panel Principal', pacientes:'Pacientes', historias:'Historias Clínicas',
-  agenda:'Agenda', asistente:'Asistente IA', recordatorios:'Recordatorios', redes:'Redes Sociales',
+  agenda:'Agenda', recordatorios:'Recordatorios',
   respaldos:'Respaldos',
   occEmpresas:'Empresas', occDashboard:'Dashboard Ocupacional', occRegistros:'Registros EMOP', occEscaneres:'Escáneres', occPlantas:'Plantas', occPlanes:'Planes de SSO'
 };
@@ -2932,7 +2892,7 @@ function goTo(page) {
   const nav = document.getElementById('nav-' + page);
   if (nav) nav.classList.add('active');
   document.getElementById('pageTitle').textContent = pageTitles[page] || page;
-  const renders = { dashboard:renderDashboard, pacientes:renderPacientes, historias:renderHistorias, agenda:renderAgenda, asistente:renderAsistente, recordatorios:renderRecordatorios, redes:renderRedes, respaldos:renderRespaldos, occEmpresas:renderOcupEmpresas, occDashboard:renderOcupDashboard, occRegistros:renderOcupRegistros, occEscaneres:renderOcupEscaneres, occPlantas:renderOcupPlantas, occPlanes:renderPlanesSSO };
+  const renders = { dashboard:renderDashboard, pacientes:renderPacientes, historias:renderHistorias, agenda:renderAgenda, recordatorios:renderRecordatorios, respaldos:renderRespaldos, occEmpresas:renderOcupEmpresas, occDashboard:renderOcupDashboard, occRegistros:renderOcupRegistros, occEscaneres:renderOcupEscaneres, occPlantas:renderOcupPlantas, occPlanes:renderPlanesSSO };
   if (renders[page]) renders[page]();
 }
 
@@ -3010,8 +2970,6 @@ function renderDashboard() {
     <button class="btn btn-primary" onclick="prepModalPaciente();openModal('modalPaciente')">+ Nuevo paciente</button>
     <button class="btn btn-primary" onclick="prepModalCita();openModal('modalCita')">+ Nueva cita</button>
     <button class="btn btn-primary" onclick="prepModalHistoria();openModal('modalHistoria')">+ Nueva historia</button>
-    <button class="btn btn-outline" onclick="goTo('asistente')">🤖 Asistente IA</button>
-    <button class="btn btn-outline" onclick="goTo('redes')">📱 Crear post</button>
   </div>
 </div>`);
 }
@@ -4974,127 +4932,9 @@ function renderRespaldos() {
     <div class="statBox"><div class="statNum">${state.pacientes.length}</div><div class="statLbl">Pacientes</div></div>
     <div class="statBox"><div class="statNum">${state.historias.length}</div><div class="statLbl">Historias</div></div>
     <div class="statBox"><div class="statNum">${state.citas.length}</div><div class="statLbl">Citas</div></div>
-    <div class="statBox"><div class="statNum">${state.posts.length}</div><div class="statLbl">Posts</div></div>
   </div>
 </div>`);
 }
-// ── ASISTENTE IA ──────────────────────────────────
-function renderAsistente() {
-  setC(`
-<div class="card">
-  <div class="cardTitle">🤖 Asistente IA — MediBot</div>
-  <p style="font-size:13px;color:#888;margin-bottom:1rem">Redacte mensajes, recordatorios, contenido para redes o consulte información médica general.</p>
-  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem">
-    <button class="btn btn-primary" onclick="openClinicWhatsApp('Hola, le saluda la Clínica Dr. Allan Leal.')">Abrir WhatsApp clínica +502 3800 6697</button>
-    <button class="btn btn-outline" onclick="usarPlantilla('Redacta un mensaje profesional de WhatsApp para un paciente de la Clínica Dr. Allan Leal.')">Plantilla WhatsApp clínica</button>
-  </div>
-  <div class="tabBar">
-    <button class="tab active" onclick="switchTab(this,'tabChat')">💬 Chat libre</button>
-    <button class="tab" onclick="switchTab(this,'tabPlantillas')">⚡ Plantillas rápidas</button>
-  </div>
-  <div id="tabChat">
-    <div class="chatWrap">
-      <div class="chatBox" id="chatBox">${renderMsgs()}</div>
-      <div class="chatInputRow">
-        <input type="text" id="chatIn" placeholder="Escribe tu consulta al asistente..." onkeydown="if(event.key==='Enter')sendChat()"/>
-        <button onclick="sendChat()" title="Enviar">➤</button>
-      </div>
-    </div>
-    <div class="hint">💡 Ejemplos: "Redacta un recordatorio de cita para María González mañana a las 9am" · "Crea un post para Instagram sobre diabetes" · "¿Cuáles son los síntomas de hipoglucemia?"</div>
-  </div>
-  <div id="tabPlantillas" class="hidden">
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:.75rem;margin-top:.5rem">
-      ${[
-        ['📅 Recordatorio de cita', 'Redacta un recordatorio de cita médica amable y profesional para enviar por WhatsApp a un paciente.'],
-        ['✅ Confirmación de cita', 'Genera un mensaje de confirmación de cita con instrucciones de preparación para el paciente.'],
-        ['🔬 Resultados listos', 'Redacta un mensaje para notificar al paciente que sus resultados de laboratorio están listos para ser recogidos.'],
-        ['💊 Instrucciones de medicación', 'Genera instrucciones claras y sencillas sobre cómo tomar un medicamento para entregar al paciente.'],
-        ['📱 Post Facebook — salud', 'Crea un post educativo y atractivo sobre salud preventiva para Facebook con hashtags relevantes.'],
-        ['📸 Post Instagram', 'Diseña un post motivacional e informativo para Instagram sobre bienestar con emojis y hashtags.'],
-        ['🌿 Consejos semanales', 'Genera 5 consejos de salud sencillos y prácticos para compartir en redes sociales esta semana.'],
-        ['📞 Seguimiento post-consulta', 'Redacta un mensaje de seguimiento para enviar al paciente 3 días después de su consulta.']
-      ].map(([t,p]) => `<div class="card" style="cursor:pointer;margin:0;border-color:var(--border)" onclick="usarPlantilla(\`${p}\`)" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
-        <div style="font-size:14px;font-weight:500;margin-bottom:.3rem">${t}</div>
-        <div style="font-size:12px;color:#aaa;line-height:1.5">${p.slice(0,65)}...</div>
-      </div>`).join('')}
-    </div>
-  </div>
-</div>`);
-  scrollChat();
-}
-function switchTab(btn, tabId) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  ['tabChat','tabPlantillas'].forEach(id => { const el=document.getElementById(id); if(el) el.classList.toggle('hidden', id!==tabId); });
-}
-function renderMsgs() {
-  return state.chatHistory.map(m => `<div class="msg ${m.role}">
-    <div class="msgLabel">${m.role==='ai'?'🤖 MediBot':'👤 Usted'}</div>
-    <div class="bubble">${m.text.replace(/</g,'&lt;')}</div>
-  </div>`).join('');
-}
-function scrollChat() { setTimeout(() => { const b=document.getElementById('chatBox'); if(b) b.scrollTop=b.scrollHeight; }, 60); }
-function usarPlantilla(prompt) {
-  switchTab(document.querySelector('.tabBar .tab'), 'tabChat');
-  document.getElementById('chatIn').value = prompt;
-  sendChat();
-}
-function generarRespuestaMediBotLocal(text) {
-  const q = text.toLowerCase();
-  const firma = '\n\nAtentamente,\nClínica Dr. Allan Leal\nWhatsApp: +502 3800 6697';
-  if (/resultado|laboratorio|listo|recogido|recoger/.test(q)) {
-    return `Claro, doctor. Puede enviar este mensaje por WhatsApp:\n\nBuen día, le saluda la Clínica Dr. Allan Leal. Le informamos que sus resultados de laboratorio ya se encuentran listos para ser recogidos.\n\nPuede pasar en horario de atención o escribirnos a este número si necesita coordinar la entrega. Quedamos atentos para apoyarle.${firma}`;
-  }
-  if (/recordatorio|cita|mañana|consulta/.test(q)) {
-    return `Claro, aquí tiene un recordatorio listo para WhatsApp:\n\nBuen día, le saluda la Clínica Dr. Allan Leal. Le recordamos que tiene una cita médica programada próximamente.\n\nPor favor llegue 10 minutos antes, traiga su documento de identificación y cualquier resultado o medicamento que esté utilizando actualmente.\n\nSi necesita confirmar, reprogramar o cancelar, puede responder a este mensaje.${firma}`;
-  }
-  if (/confirmaci[oó]n|confirmar/.test(q)) {
-    return `Mensaje sugerido:\n\nBuen día, le saluda la Clínica Dr. Allan Leal. Confirmamos su cita médica. Le recomendamos presentarse 10 minutos antes y traer su documento de identificación.\n\nSi presenta algún inconveniente o necesita reprogramar, por favor escríbanos con anticipación.${firma}`;
-  }
-  if (/cancel/.test(q)) {
-    return `Mensaje sugerido:\n\nBuen día, gracias por avisarnos. Hemos tomado nota de la cancelación de su cita. Cuando desee reprogramarla, puede escribirnos por este medio y con gusto le apoyaremos con una nueva fecha y horario.${firma}`;
-  }
-  if (/medicamento|medicaci[oó]n|dosis|tomar/.test(q)) {
-    return `Formato sugerido para instrucciones al paciente:\n\nIndicaciones:\n1. Tome el medicamento exactamente como fue indicado por su médico.\n2. No suspenda ni modifique la dosis sin consultar previamente.\n3. Si presenta alergia, reacción adversa, mareos intensos, dificultad para respirar o empeoramiento de síntomas, comuníquese de inmediato o acuda a emergencia.\n4. Mantenga sus controles médicos según lo programado.\n\nPuede completar aquí el nombre del medicamento, dosis, horario y duración.`;
-  }
-  if (/instagram|facebook|post|redes/.test(q)) {
-    return `Propuesta para redes sociales:\n\nCuidar su salud también es una forma de cuidar a quienes ama. Un chequeo médico oportuno ayuda a prevenir complicaciones, detectar riesgos y mejorar su calidad de vida.\n\nAgenda tu evaluación médica con la Clínica Dr. Allan Leal.\n\n#SaludPreventiva #Bienestar #Medicina #Geriatría #Diabetes #ClinicaDrAllanLeal`;
-  }
-  if (/diabetes|hipoglucemia|glucosa|az[uú]car/.test(q)) {
-    return `Información general:\n\nLa hipoglucemia puede causar sudoración, temblor, hambre intensa, palpitaciones, debilidad, confusión, visión borrosa o somnolencia. En personas con diabetes, es importante confirmar con glucómetro si es posible y seguir el plan indicado por su médico.\n\nSi hay pérdida de conciencia, convulsiones, confusión marcada o dificultad para tragar, debe buscar atención urgente.`;
-  }
-  return `Claro, doctor. Le dejo una redacción base profesional y cálida:\n\nBuen día, le saluda la Clínica Dr. Allan Leal. Queremos darle seguimiento y apoyarle con la información correspondiente a su atención médica. Si tiene alguna duda, puede responder a este mensaje y con gusto le orientaremos.\n\nPuede ajustar nombres, fecha, hora o indicaciones específicas según el caso.${firma}`;
-}
-async function sendChat() {
-  const input = document.getElementById('chatIn');
-  const text  = input.value.trim();
-  if (!text) return;
-  input.value = '';
-  state.chatHistory.push({ role:'user', text });
-  const box = document.getElementById('chatBox');
-  if (box) { box.innerHTML = renderMsgs() + `<div class="msg ai"><div class="msgLabel">🤖 MediBot</div><div class="bubble" style="opacity:.5">Escribiendo...</div></div>`; scrollChat(); }
-
-  state.chatHistory.push({ role:'ai', text:generarRespuestaMediBotLocal(text) });
-  saveAppData({ backupToFolder:true });
-  if (document.getElementById('chatBox')) { document.getElementById('chatBox').innerHTML = renderMsgs(); scrollChat(); }
-  return;
-
-  const pacCtx   = state.pacientes.map(p => `${p.nombre} (${calcEdad(p.nac)}, ${p.sexo}${p.alergias&&p.alergias!=='Ninguna'?', alergia: '+p.alergias:''})`).join('; ');
-  const citasCtx = state.citas.map(c => `${getPac(c.pacienteId).nombre}: ${fmtF(c.fecha)} ${c.hora} (${c.tipo}, ${c.estado})`).join('; ');
-  const sys = `Eres MediBot, el asistente de IA de un consultorio médico especialista en Guatemala. Contexto del consultorio:\n- Pacientes: ${pacCtx}\n- Próximas citas: ${citasCtx}\n\nTu rol: Ayudar al médico a redactar mensajes profesionales y cálidos para pacientes (WhatsApp), recordatorios de citas, instrucciones médicas, contenido para redes sociales (Facebook e Instagram) y responder consultas de salud generales. Responde SIEMPRE en español, de forma profesional, concisa y cálida. Para redes sociales incluye emojis apropiados y hashtags relevantes. Para mensajes de pacientes usa un tono cercano y empático.`;
-
-  try {
-    const res  = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, system:sys, messages:state.chatHistory.map(m => ({ role:m.role==='ai'?'assistant':'user', content:m.text })) }) });
-    const data = await res.json();
-    const reply = data.content?.[0]?.text || 'No pude procesar su solicitud.';
-    state.chatHistory.push({ role:'ai', text:reply });
-  } catch(e) {
-    state.chatHistory.push({ role:'ai', text:generarRespuestaMediBotLocal(text) });
-  }
-  saveAppData({ backupToFolder:true });
-  if (document.getElementById('chatBox')) { document.getElementById('chatBox').innerHTML = renderMsgs(); scrollChat(); }
-}
-
 // ── RECORDATORIOS ─────────────────────────────────
 function renderRecordatorios() {
   const hoy  = new Date().toISOString().split('T')[0];
@@ -5145,141 +4985,6 @@ function genRecordatorio(nombre, fecha, hora, tipo) {
 function openClinicWhatsApp(text = '') {
   const phone = (state.socialLinks?.whatsapp || '+50238006697').replace(/\D/g, '');
   window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-}
-
-// ── REDES SOCIALES ────────────────────────────────
-function renderRedes() {
-  setC(`
-<div class="tabBar">
-  <button class="tab active" onclick="switchTabR(this,'tabPosts')">📄 Publicaciones</button>
-  <button class="tab" onclick="switchTabR(this,'tabGenerar')">✨ Generar con IA</button>
-</div>
-<div id="tabPosts">
-  <div class="card">
-    <div class="cardTitle">Conexiones de la clínica</div>
-    <div class="socialLinkGrid">
-      <div class="fGroup"><label>Facebook</label><input id="socialFacebook" value="${state.socialLinks?.facebook || ''}" placeholder="Link de la página de Facebook"></div>
-      <div class="fGroup"><label>Instagram</label><input id="socialInstagram" value="${state.socialLinks?.instagram || ''}" placeholder="Link de Instagram"></div>
-      <div class="fGroup"><label>Página web</label><input id="socialWebsite" value="${state.socialLinks?.website || ''}" placeholder="https://..."></div>
-      <div class="fGroup"><label>WhatsApp clínica</label><input id="socialWhatsapp" value="${state.socialLinks?.whatsapp || '+50238006697'}"></div>
-    </div>
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
-      <button class="btn btn-primary" onclick="guardarSocialLinks()">Guardar conexiones</button>
-      <button class="btn btn-outline" onclick="abrirSocial('facebook')">Abrir Facebook</button>
-      <button class="btn btn-outline" onclick="abrirSocial('instagram')">Abrir Instagram</button>
-      <button class="btn btn-outline" onclick="abrirSocial('website')">Abrir página web</button>
-    </div>
-    <p style="font-size:12px;color:#888;margin-top:.75rem">Para publicación automática real se usa Meta Business/API. No es recomendable guardar usuarios y contraseñas dentro de esta página.</p>
-  </div>
-  ${state.posts.length === 0 ? '<p style="color:#aaa">No hay publicaciones aún. Use la pestaña "Generar con IA".</p>' : ''}
-  ${state.posts.map(p => `<div class="postCard">
-    <div class="postPlatform" style="color:${p.plataforma==='facebook'?'#1877f2':'#e1306c'}">
-      ${p.plataforma==='facebook'?'📘 Facebook':'📸 Instagram'}
-      <span style="color:#aaa;font-weight:400;font-size:11px;text-transform:none;letter-spacing:0;margin-left:auto">${fmtF(p.fecha)}</span>
-      <span class="badge ${p.estado==='publicado'?'badge-green':'badge-gray'}">${p.estado}</span>
-    </div>
-    <div class="postText">${p.texto}</div>
-    <div style="display:flex;gap:.5rem">
-      <button class="btn btn-sm btn-outline" onclick="copiarPost(${p.id})">📋 Copiar</button>
-      <button class="btn btn-sm btn-primary" onclick="abrirSocial('${p.plataforma}')">Abrir red</button>
-      <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="eliminarPost(${p.id})">🗑 Eliminar</button>
-    </div>
-  </div>`).join('')}
-</div>
-<div id="tabGenerar" class="hidden">
-  <div class="card">
-    <div class="cardTitle">✨ Generador de contenido con IA</div>
-    <div class="fRow">
-      <div class="fGroup"><label>Red social</label>
-        <select id="redSel"><option value="facebook">Facebook</option><option value="instagram">Instagram</option></select>
-      </div>
-      <div class="fGroup"><label>Tema del contenido</label>
-        <select id="temaSel">
-          <option>Prevención de enfermedades</option>
-          <option>Tips de salud diarios</option>
-          <option>Higiene y bienestar</option>
-          <option>Importancia del chequeo médico</option>
-          <option>Alimentación saludable</option>
-          <option>Ejercicio y salud</option>
-          <option>Salud mental y estrés</option>
-          <option>Información de servicios del consultorio</option>
-          <option>Datos curiosos de salud</option>
-          <option>Cuidado cardiovascular</option>
-        </select>
-      </div>
-    </div>
-    <div class="fRow full">
-      <div class="fGroup"><label>Instrucciones adicionales (opcional)</label>
-        <input type="text" id="instrAd" placeholder="Ej: Enfocado en adultos mayores, tono motivacional, mencionar horario de atención..."/>
-      </div>
-    </div>
-    <button class="btn btn-primary" onclick="generarPost()" id="btnGenPost">✨ Generar publicación</button>
-    <div id="postPreview" style="display:none;margin-top:1rem;border:1.5px solid var(--border);border-radius:10px;padding:1rem">
-      <div style="font-size:10.5px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:.4px;margin-bottom:.5rem">Vista previa</div>
-      <div id="postTextoPreview" style="font-size:13.5px;line-height:1.65;white-space:pre-wrap;background:#f8f8f6;border-radius:7px;padding:.75rem"></div>
-      <div style="display:flex;gap:.5rem;margin-top:.75rem">
-        <button class="btn btn-sm btn-primary" onclick="guardarPost()">💾 Guardar publicación</button>
-        <button class="btn btn-sm btn-outline" onclick="generarPost()">🔄 Regenerar</button>
-      </div>
-    </div>
-  </div>
-</div>`);
-}
-function switchTabR(btn, tabId) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  ['tabPosts','tabGenerar'].forEach(id => { const el=document.getElementById(id); if(el) el.classList.toggle('hidden', id!==tabId); });
-}
-function guardarSocialLinks() {
-  state.socialLinks = {
-    facebook:document.getElementById('socialFacebook')?.value.trim() || '',
-    instagram:document.getElementById('socialInstagram')?.value.trim() || '',
-    website:document.getElementById('socialWebsite')?.value.trim() || '',
-    whatsapp:document.getElementById('socialWhatsapp')?.value.trim() || '+50238006697'
-  };
-  saveAppData({ backupToFolder:true });
-  alert('Conexiones guardadas.');
-}
-function abrirSocial(tipo) {
-  const url = state.socialLinks?.[tipo];
-  if (!url) { alert('Primero guarde el enlace de ' + tipo + ' en Conexiones de la clínica.'); return; }
-  window.open(url, '_blank', 'noopener');
-}
-let postGenerado = { plataforma:'', texto:'' };
-async function generarPost() {
-  const red   = document.getElementById('redSel').value;
-  const tema  = document.getElementById('temaSel').value;
-  const instr = document.getElementById('instrAd').value;
-  const btn   = document.getElementById('btnGenPost');
-  btn.textContent = '⏳ Generando...'; btn.disabled = true;
-  const prompt = `Crea un post para ${red==='facebook'?'Facebook':'Instagram'} de un consultorio médico especialista en Guatemala sobre el tema: "${tema}". ${instr?'Instrucciones adicionales: '+instr+'.':''}\n\nEl post debe ser:\n- Educativo, profesional y cálido\n- Apropiado para un consultorio médico\n- Con emojis apropiados (no excesivos)\n- Con 3-5 hashtags relevantes al final\n- Entre 80-150 palabras\n\nResponde SOLO con el texto del post, sin explicaciones ni comillas alrededor.`;
-  try {
-    const res  = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:500, messages:[{role:'user',content:prompt}] }) });
-    const data = await res.json();
-    postGenerado = { plataforma:red, texto:data.content?.[0]?.text || 'Error al generar.' };
-  } catch(e) {
-    postGenerado = { plataforma:red, texto:`🌿 La salud es nuestro bien más preciado.\n\n${tema} es fundamental para mantener una vida plena y saludable. En nuestro consultorio estamos comprometidos con tu bienestar. 💚\n\nAgenda tu cita hoy y demos juntos el primer paso hacia una mejor salud.\n\n#Salud #Bienestar #ConsultorioMedico #Guatemala` };
-  }
-  document.getElementById('postTextoPreview').textContent = postGenerado.texto;
-  document.getElementById('postPreview').style.display = 'block';
-  btn.textContent = '✨ Generar publicación'; btn.disabled = false;
-}
-function guardarPost() {
-  state.posts.unshift({ id:state.nextPostId++, plataforma:postGenerado.plataforma, texto:postGenerado.texto, fecha:new Date().toISOString().split('T')[0], estado:'borrador' });
-  saveAppData({ backupToFolder:true });
-  document.getElementById('postPreview').style.display = 'none';
-  switchTabR(document.querySelector('.tabBar .tab'), 'tabPosts');
-  renderRedes();
-}
-function copiarPost(id) {
-  const p = state.posts.find(x => x.id===id);
-  if (!p) return;
-  navigator.clipboard && navigator.clipboard.writeText(p.texto).catch(()=>{});
-  const ta = document.createElement('textarea'); ta.value = p.texto; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-  alert('✅ Post copiado al portapapeles.');
-}
-function eliminarPost(id) {
-  if (confirm('¿Desea eliminar esta publicación?')) { state.posts = state.posts.filter(x => x.id!==id); saveAppData({ backupToFolder:true }); renderRedes(); }
 }
 </script>
 </body>
