@@ -1,6 +1,6 @@
 // ── RECORDATORIOS ─────────────────────────────────
 function renderRecordatorios() {
-  const hoy  = new Date().toISOString().split('T')[0];
+  const hoy  = todayLocalISO();
   const prox = state.citas.filter(c => c.fecha >= hoy).sort((a,b) => a.fecha > b.fecha ? 1 : -1);
   setC(`
 <div class="card">

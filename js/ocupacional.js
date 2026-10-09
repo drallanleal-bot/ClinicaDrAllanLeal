@@ -8,7 +8,7 @@ function prepModalCita(pacId, citaId) {
   if (selectedPac) sel.value = selectedPac;
   document.getElementById('modalCitaTitle').textContent = c ? '📅 Editar Cita' : '📅 Nueva Cita';
   document.getElementById('btnGuardarCita').textContent = c ? '💾 Guardar Cambios' : '💾 Guardar Cita';
-  document.getElementById('cFecha').value = c ? c.fecha || '' : new Date().toISOString().split('T')[0];
+  document.getElementById('cFecha').value = c ? c.fecha || '' : todayLocalISO();
   document.getElementById('cHora').value = c ? c.hora || '' : '';
   document.getElementById('cTipo').value = c ? c.tipo || document.getElementById('cTipo').value : document.getElementById('cTipo').value;
   document.getElementById('cNotas').value = c ? c.notas || '' : '';
@@ -16,6 +16,11 @@ function prepModalCita(pacId, citaId) {
 function guardarCita() {
   const pid = document.getElementById('cPaciente').value;
   if (!pid) { alert('Seleccione un paciente.'); return; }
+  const fecha = document.getElementById('cFecha').value;
+  if (!fecha) { alert('Ingrese la fecha de la cita.'); return; }
+  const hora = document.getElementById('cHora').value || '08:00';
+  const choque = state.citas.find(x => String(x.id) !== String(editingCitaId) && x.fecha === fecha && x.hora === hora && x.estado !== 'cancelada');
+  if (choque && !confirm(`Ya hay una cita el ${fmtF(fecha)} a las ${hora} con ${getPac(choque.pacienteId).nombre}.\n\n¿Desea guardarla de todos modos?`)) return;
   const id = editingCitaId || state.nextCitaId++;
   const previa = state.citas.find(x => String(x.id) === String(id));
   const cita = {
