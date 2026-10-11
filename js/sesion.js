@@ -207,6 +207,11 @@ async function doLogout() {
   document.getElementById('loginPass').value = '';
 }
 document.getElementById('loginPass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+document.getElementById('loginUser').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const pass = document.getElementById('loginPass');
+  if (pass.value) doLogin(); else pass.focus();
+});
 
 if (auth) {
   auth.onAuthStateChanged(async (firebaseUser) => {

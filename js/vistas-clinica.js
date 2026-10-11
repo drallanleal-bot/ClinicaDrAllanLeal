@@ -43,7 +43,7 @@ function refreshClinicPage(fallback = 'dashboard') {
 
 // ── DASHBOARD ─────────────────────────────────────
 function renderDashboard() {
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = todayLocalISO();
   const citasHoy = state.citas.filter(c => c.fecha === hoy);
   const prox = state.citas.filter(c => c.fecha > hoy).length;
   setC(`
@@ -267,6 +267,76 @@ function borrarPaciente(id) {
   saveAppData({ backupToFolder:true });
   refreshClinicPage('pacientes');
 }
+// Fecha de hoy según el reloj del equipo (toISOString usa UTC y en Guatemala después de las 6 p. m. daba el día siguiente).
+function todayLocalISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Signos vitales: avisa (amarillo) si el valor está fuera de lo normal y bloquea solo lo que es claramente un error de dedo.
+const VITAL_RULES = {
+  hTA:   { name:'Presión arterial' },
+  hFC:   { name:'Frecuencia cardíaca', min:20, max:250, low:60, high:100, unit:'lpm' },
+  hFR:   { name:'Frecuencia respiratoria', min:4, max:70, low:12, high:20, unit:'rpm' },
+  hTemp: { name:'Temperatura', min:30, max:45, low:36, high:37.5, unit:'°C' },
+  hSat:  { name:'Saturación O₂', min:40, max:100, low:95, unit:'%' },
+  hGMT:  { name:'GMT', min:20, max:700, low:70, high:140, unit:'mg/dL' }
+};
+let historiaVitalOriginals = {};
+
+function evaluateVital(id, raw) {
+  const value = String(raw || '').trim();
+  // Texto libre sin números (por ejemplo "Normal") se respeta tal cual.
+  if (!value || !/\d/.test(value)) return { level:'ok', msg:'' };
+  const rule = VITAL_RULES[id];
+  if (id === 'hTA') {
+    const m = value.match(/(\d{2,3})\s*[\/\-]\s*(\d{2,3})/);
+    if (!m) return { level:'error', msg:'Escriba la presión como 120/80.' };
+    const sys = Number(m[1]), dia = Number(m[2]);
+    if (sys < 50 || sys > 260 || dia < 30 || dia > 160 || dia >= sys) return { level:'error', msg:'Revise la presión, parece un error de dedo.' };
+    if (sys >= 140 || dia >= 90) return { level:'warn', msg:'Presión alta (normal hasta 139/89).' };
+    if (sys < 90 || dia < 60) return { level:'warn', msg:'Presión baja (normal desde 90/60).' };
+    return { level:'ok', msg:'' };
+  }
+  const num = parseFloat(value.replace(',', '.').match(/-?\d+(?:\.\d+)?/)[0]);
+  if (num < rule.min || num > rule.max) return { level:'error', msg:`Revise el valor: ${rule.name.toLowerCase()} entre ${rule.min} y ${rule.max} ${rule.unit}.` };
+  if (rule.low !== undefined && num < rule.low) return { level:'warn', msg:`Bajo (normal desde ${rule.low} ${rule.unit}).` };
+  if (rule.high !== undefined && num > rule.high) return { level:'warn', msg:`Alto (normal hasta ${rule.high} ${rule.unit}).` };
+  return { level:'ok', msg:'' };
+}
+
+function checkVitalField(id) {
+  const input = document.getElementById(id);
+  const msg = document.getElementById(id + '_msg');
+  if (!input) return { level:'ok', msg:'' };
+  const result = evaluateVital(id, input.value);
+  input.classList.toggle('vitalWarn', result.level === 'warn');
+  input.classList.toggle('vitalError', result.level === 'error');
+  if (msg) { msg.textContent = result.msg; msg.className = 'vitalMsg' + (result.level === 'ok' ? '' : ' ' + result.level); }
+  return result;
+}
+
+// Al editar una historia vieja solo se bloquean los signos vitales que se cambiaron.
+function blockingVitalErrors() {
+  return Object.keys(VITAL_RULES)
+    .map(id => ({ id, value:document.getElementById(id)?.value || '', result:checkVitalField(id) }))
+    .filter(v => v.result.level === 'error' && String(v.value).trim() !== String(historiaVitalOriginals[v.id] || '').trim());
+}
+
+function setHistoriaSections(h) {
+  const filled = ids => ids.some(id => String(document.getElementById(id)?.value || '').trim());
+  const hasAdj = h && Array.isArray(h.adjuntos) && h.adjuntos.length;
+  const open = h ? {
+    consulta:true,
+    anamnesis:filled(['hAnamnesis']),
+    signos:filled(['hTA','hFC','hFR','hTemp','hSat','hGMT','hPesoKg','hAltura']),
+    examen:filled(['hExamenFisico']),
+    plan:filled(['hTratamiento','hObs']),
+    estudios:!!hasAdj
+  } : { consulta:true, anamnesis:true, signos:true, examen:false, plan:false, estudios:false };
+  document.querySelectorAll('#modalHistoria .fSection').forEach(sec => { sec.open = !!open[sec.dataset.sec]; });
+}
+
 function prepModalHistoria(pacId, histId) {
   editingHistoriaId = histId || null;
   const h = histId ? state.historias.find(x => String(x.id) === String(histId)) : null;
@@ -276,7 +346,7 @@ function prepModalHistoria(pacId, histId) {
   if (selectedPac) sel.value = selectedPac;
   document.getElementById('modalHistoriaTitle').textContent = h ? '📋 Editar Historia Clínica' : '📋 Nueva Historia Clínica';
   document.getElementById('btnGuardarHistoria').textContent = h ? '💾 Guardar Cambios' : '💾 Guardar Historia';
-  document.getElementById('hFecha').value = h ? h.fecha || '' : new Date().toISOString().split('T')[0];
+  document.getElementById('hFecha').value = h ? h.fecha || '' : todayLocalISO();
   document.getElementById('hMotivo').value = h ? h.motivo || '' : '';
   document.getElementById('hDiagnostico').value = h ? h.diagnostico || '' : '';
   document.getElementById('hAnamnesis').value = h ? h.anamnesis || '' : '';
@@ -301,10 +371,22 @@ function prepModalHistoria(pacId, histId) {
   if (adjPreview) adjPreview.innerHTML = h && h.adjuntos?.length ? renderAttachmentList(h.adjuntos) : '<div class="attachHint">Aun no ha seleccionado archivos.</div>';
   renderPatientPreviousAttachments(selectedPac || '', histId || '');
   updateClinicImc();
+  historiaVitalOriginals = h ? { hTA:h.ta, hFC:h.fc, hFR:h.fr, hTemp:h.temp, hSat:h.sat, hGMT:h.gmt } : {};
+  Object.keys(VITAL_RULES).forEach(checkVitalField);
+  setHistoriaSections(h);
 }
 function historiaDesdeFormulario(id) {
   const pid = document.getElementById('hPaciente').value;
   if (!pid) { alert('Seleccione un paciente.'); return null; }
+  if (!document.getElementById('hFecha').value) { alert('Ingrese la fecha de consulta.'); return null; }
+  const vitalErrors = blockingVitalErrors();
+  if (vitalErrors.length) {
+    const sec = document.querySelector('#modalHistoria .fSection[data-sec="signos"]');
+    if (sec) sec.open = true;
+    document.getElementById(vitalErrors[0].id)?.focus();
+    alert('Revise los signos vitales marcados en rojo:\n\n' + vitalErrors.map(v => `• ${VITAL_RULES[v.id].name}: ${v.result.msg}`).join('\n'));
+    return null;
+  }
   const imc = clinicImcValue(document.getElementById('hPesoKg').value, document.getElementById('hAltura').value);
   return {
     id,
@@ -331,9 +413,10 @@ function historiaDesdeFormulario(id) {
   };
 }
 async function guardarHistoria() {
-  const id = editingHistoriaId || state.nextHistId++;
+  const id = editingHistoriaId || state.nextHistId;
   const historia = historiaDesdeFormulario(id);
   if (!historia) return;
+  if (!editingHistoriaId) state.nextHistId++;
   const idx = state.historias.findIndex(h => String(h.id) === String(id));
   const previousAdjuntos = idx >= 0 && Array.isArray(state.historias[idx].adjuntos) ? state.historias[idx].adjuntos : [];
   const btn = document.getElementById('btnGuardarHistoria');

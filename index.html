@@ -6,7 +6,7 @@
 <title>Dr. Allan Leal — Sistema de Gestión Médica</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/estilos.css?v=20261007">
+<link rel="stylesheet" href="css/estilos.css?v=20261009">
 </head>
 <body>
 
@@ -82,9 +82,11 @@
       <h3 id="modalHistoriaTitle">📋 Nueva Historia Clínica</h3>
       <button class="btnClose" onclick="closeModal('modalHistoria')">✕</button>
     </div>
+    <details class="fSection" data-sec="consulta" open>
+    <summary>Consulta</summary>
     <div class="fRow">
-      <div class="fGroup"><label>Paciente</label><select id="hPaciente" onchange="renderPatientPreviousAttachments(this.value, editingHistoriaId)"><option value="">Seleccionar...</option></select></div>
-      <div class="fGroup"><label>Fecha de consulta</label><input type="date" id="hFecha"/></div>
+      <div class="fGroup"><label>Paciente <span class="req">*</span></label><select id="hPaciente" onchange="renderPatientPreviousAttachments(this.value, editingHistoriaId)"><option value="">Seleccionar...</option></select></div>
+      <div class="fGroup"><label>Fecha de consulta <span class="req">*</span></label><input type="date" id="hFecha"/></div>
     </div>
     <div class="fRow full">
       <div class="fGroup attachPanel">
@@ -96,34 +98,48 @@
       <div class="fGroup"><label>Motivo de consulta</label><input type="text" id="hMotivo" placeholder="Ej: Cefalea persistente"/></div>
       <div class="fGroup"><label>Diagnóstico</label><input type="text" id="hDiagnostico" placeholder="Ej: Migraña tensional"/></div>
     </div>
+    </details>
+    <details class="fSection" data-sec="anamnesis" open>
+    <summary>Anamnesis</summary>
     <div class="fRow full">
       <div class="fGroup"><label>Anamnesis e historia clínica</label><textarea id="hAnamnesis" rows="4" placeholder="Descripción detallada del caso, síntomas, evolución..."></textarea></div>
     </div>
-    <div style="font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.4px;margin-bottom:.5rem">Signos Vitales</div>
+    </details>
+    <details class="fSection" data-sec="signos" open>
+    <summary>Signos vitales</summary>
     <div class="fRow three">
-      <div class="fGroup"><label>Presión arterial</label><input type="text" id="hTA" placeholder="120/80 mmHg"/></div>
-      <div class="fGroup"><label>Frecuencia cardíaca</label><input type="text" id="hFC" placeholder="72 lpm"/></div>
-      <div class="fGroup"><label>Frecuencia respiratoria</label><input type="text" id="hFR" placeholder="16 rpm"/></div>
+      <div class="fGroup"><label>Presión arterial</label><input type="text" id="hTA" placeholder="120/80 mmHg" oninput="checkVitalField('hTA')"/><div class="vitalMsg" id="hTA_msg"></div></div>
+      <div class="fGroup"><label>Frecuencia cardíaca</label><input type="text" id="hFC" placeholder="72 lpm" oninput="checkVitalField('hFC')"/><div class="vitalMsg" id="hFC_msg"></div></div>
+      <div class="fGroup"><label>Frecuencia respiratoria</label><input type="text" id="hFR" placeholder="16 rpm" oninput="checkVitalField('hFR')"/><div class="vitalMsg" id="hFR_msg"></div></div>
     </div>
     <div class="fRow three">
-      <div class="fGroup"><label>Temperatura</label><input type="text" id="hTemp" placeholder="36.5°C"/></div>
-      <div class="fGroup"><label>Saturación O₂</label><input type="text" id="hSat" placeholder="98%"/></div>
-      <div class="fGroup"><label>GMT</label><input type="text" id="hGMT" placeholder="95 mg/dL"/></div>
+      <div class="fGroup"><label>Temperatura</label><input type="text" id="hTemp" placeholder="36.5°C" oninput="checkVitalField('hTemp')"/><div class="vitalMsg" id="hTemp_msg"></div></div>
+      <div class="fGroup"><label>Saturación O₂</label><input type="text" id="hSat" placeholder="98%" oninput="checkVitalField('hSat')"/><div class="vitalMsg" id="hSat_msg"></div></div>
+      <div class="fGroup"><label>GMT</label><input type="text" id="hGMT" placeholder="95 mg/dL" oninput="checkVitalField('hGMT')"/><div class="vitalMsg" id="hGMT_msg"></div></div>
     </div>
     <div class="fRow three">
       <div class="fGroup"><label>Peso kg</label><input type="number" step="0.1" id="hPesoKg" placeholder="70" oninput="updateClinicImc()"/></div>
       <div class="fGroup"><label>Altura m o cm</label><input type="number" step="0.01" id="hAltura" placeholder="1.70" oninput="updateClinicImc()"/></div>
       <div class="fGroup"><label>IMC y clasificación</label><input type="text" id="hIMC" readonly placeholder="Automático"/></div>
     </div>
+    </details>
+    <details class="fSection" data-sec="examen">
+    <summary>Examen físico</summary>
     <div class="fRow full">
       <div class="fGroup"><label>Examen físico</label><textarea id="hExamenFisico" rows="10" placeholder="Exploración física por sistemas..."></textarea></div>
     </div>
+    </details>
+    <details class="fSection" data-sec="plan">
+    <summary>Plan</summary>
     <div class="fRow full">
       <div class="fGroup"><label>Tratamiento y prescripción</label><textarea id="hTratamiento" rows="3" placeholder="Medicamentos, dosis, vía de administración, duración..."></textarea></div>
     </div>
     <div class="fRow full">
       <div class="fGroup"><label>Observaciones y seguimiento</label><textarea id="hObs" rows="2" placeholder="Próxima cita, exámenes solicitados, indicaciones..."></textarea></div>
     </div>
+    </details>
+    <details class="fSection" data-sec="estudios">
+    <summary>Laboratorios y estudios</summary>
     <div class="fRow full">
       <div class="fGroup attachPanel">
         <label>Laboratorios y estudios</label>
@@ -137,6 +153,7 @@
         <div id="hAdjuntosPreview" class="attachList"></div>
       </div>
     </div>
+    </details>
     <div class="modalActions">
       <button class="btn btn-outline" onclick="closeModal('modalHistoria')">Cancelar</button>
       <button class="btn btn-primary" id="btnGuardarHistoria" onclick="guardarHistoria()">💾 Guardar Historia</button>
@@ -154,8 +171,8 @@
       <button class="btnClose" onclick="closeModal('modalCita')">✕</button>
     </div>
     <div class="fRow">
-      <div class="fGroup"><label>Paciente</label><select id="cPaciente"><option value="">Seleccionar...</option></select></div>
-      <div class="fGroup"><label>Fecha</label><input type="date" id="cFecha"/></div>
+      <div class="fGroup"><label>Paciente <span class="req">*</span></label><select id="cPaciente"><option value="">Seleccionar...</option></select></div>
+      <div class="fGroup"><label>Fecha <span class="req">*</span></label><input type="date" id="cFecha"/></div>
     </div>
     <div class="fRow">
       <div class="fGroup"><label>Hora</label><input type="time" id="cHora"/></div>
@@ -236,15 +253,15 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
 <!-- Al cambiar un archivo de css/ o js/, sube el número de ?v= para que los navegadores no usen la copia vieja. -->
-<script src="js/firebase-config.js?v=20261007"></script>
-<script src="js/datos.js?v=20261007"></script>
-<script src="js/sincronizacion.js?v=20261007"></script>
-<script src="js/respaldos.js?v=20261007"></script>
-<script src="js/sesion.js?v=20261007"></script>
-<script src="js/vistas-clinica.js?v=20261007"></script>
-<script src="js/ocupacional.js?v=20261007"></script>
-<script src="js/recordatorios.js?v=20261007"></script>
-<script src="js/inicio.js?v=20261007"></script>
+<script src="js/firebase-config.js?v=20261009"></script>
+<script src="js/datos.js?v=20261009"></script>
+<script src="js/sincronizacion.js?v=20261009"></script>
+<script src="js/respaldos.js?v=20261009"></script>
+<script src="js/sesion.js?v=20261009"></script>
+<script src="js/vistas-clinica.js?v=20261009"></script>
+<script src="js/ocupacional.js?v=20261009"></script>
+<script src="js/recordatorios.js?v=20261009"></script>
+<script src="js/inicio.js?v=20261009"></script>
 
 </body>
 </html>
