@@ -724,7 +724,8 @@ tr:hover td{
 .occ-tropigas .calDay .ev{background:#f97316}
 .occ-tropigas .occTitle,
 .occ-tropigas .cardTitle,
-.occ-tropigas .moduleBtn{color:#c2410c}
+.occ-tropigas .moduleBtn{color:rgba(255,255,255,.78)}
+.occ-tropigas .moduleBtn.active{color:#fff}
 .occ-tropigas .btn-primary{border-color:#f97316}
 .occ-tropigas .btn-outline:hover{border-color:#f97316;color:#c2410c;background:#fff7ed}
 .occ-tropigas .statBox{border-color:#fed7aa;background:#fff7ed}
@@ -759,4 +760,14 @@ tr:hover td{
   .occHeader{
     flex-direction:column;
   }
+}
+
+/* Teléfono y tablet (modo app): barra superior en dos filas para que quepan los botones de módulo */
+@media(max-width:760px){
+  .topbar{flex-wrap:wrap;align-items:center;row-gap:.5rem;padding:.6rem .8rem;padding-top:max(.6rem, env(safe-area-inset-top))}
+  .topbar .brand{white-space:nowrap;font-size:14px}
+  .topbar .brand > span:first-of-type{display:none}
+  .topName{display:none}
+  .moduleSwitch{order:3;flex:1 1 100%;width:auto}
+  .moduleBtn{flex:1 1 0}
 }
