@@ -1,7 +1,7 @@
 // Permite instalar el sistema como app en teléfono y tablet.
 // Siempre pide primero la versión nueva a internet; la copia guardada solo se usa sin conexión.
 // Nunca guarda datos de Firebase ni de otros sitios: solo los archivos propios del sistema.
-const CACHE = 'clinica-app-v1';
+const CACHE = 'clinica-app-v2';
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.add('./')).then(() => self.skipWaiting()));

@@ -771,3 +771,60 @@ tr:hover td{
   .moduleSwitch{order:3;flex:1 1 100%;width:auto}
   .moduleBtn{flex:1 1 0}
 }
+
+/* Evaluación EMOP y consentimiento digitales */
+.condWrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+.condTabla{width:100%;min-width:0;table-layout:fixed;border-collapse:collapse;font-size:12.5px}
+.condTabla th:first-child,.condTabla td:first-child{width:44%}
+.condTabla th{background:#0d4330;color:#fff;font-weight:600;padding:6px 2px;text-align:center;font-size:10.5px;letter-spacing:0;text-transform:uppercase;overflow-wrap:anywhere}
+.condTabla th:first-child{text-align:left}
+.condTabla td{padding:5px 6px;border-top:1px solid var(--border)}
+.condTabla .condGrupo td{background:#eaf6f0;font-weight:700;color:#0d4330;font-size:11.5px}
+.condCelda{text-align:center}
+.condCelda input{width:20px;height:20px;cursor:pointer}
+.consTexto{max-height:220px;overflow:auto;padding:.75rem .9rem;border:1px solid var(--border);border-radius:8px;background:#fbfdfc;font-size:13px;line-height:1.55;color:#34423d}
+.consTexto p{margin:0 0 .6rem}
+.firmaLabel{display:block;margin:.85rem 0 .35rem;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#4d5b55}
+.firmaPadWrap{border:2px dashed #9fb8ad;border-radius:10px;background:#fff;max-width:560px}
+.firmaPad{display:block;width:100%;height:170px;touch-action:none;cursor:crosshair}
+.firmaGuardada{display:block;max-width:100%;max-height:170px;margin:0 auto;padding:.5rem}
+.firmaAcciones{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;max-width:560px;margin-top:.45rem}
+
+#printArea{display:none}
+@media print{
+  @page{size:letter;margin:14mm}
+  body > *:not(#printArea){display:none !important}
+  body{background:#fff !important}
+  #printArea{display:block;color:#111;font-family:'DM Sans',Arial,sans-serif;font-size:11.5px}
+  .docPagina{page-break-after:always;break-after:page}
+  .docPagina:last-child{page-break-after:auto;break-after:auto}
+  .docHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+  .docLogo{width:62px;height:62px;object-fit:contain}
+  .docLogoEmpresa{width:130px;object-fit:contain}
+  .docTitulos{text-align:center;flex:1}
+  .docTitulo{font-size:14px;font-weight:700}
+  .docSub{font-size:12.5px;font-weight:700;margin-top:2px}
+  .docSeccion{margin:12px 0 6px;font-size:12.5px;font-weight:700;color:#0b3d6b}
+  .docGrid{display:grid;grid-template-columns:2fr 1fr;gap:4px 18px}
+  .docCampo{border-bottom:1px solid #999;padding:2px 0}
+  .docCampo span{color:#333}
+  .docTabla{width:100%;border-collapse:collapse;font-size:10.5px}
+  .docTabla th{background:#0b3d6b !important;color:#fff !important;padding:4px;border:1px solid #555;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .docTabla td{border:1px solid #777;padding:3px 5px}
+  .docGrupo td{background:#dfe8f1 !important;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .docX{text-align:center;font-weight:700;width:14%}
+  .docCheck{margin:4px 0;font-size:12px}
+  .docTextoLibre{min-height:60px;border-bottom:1px solid #999;white-space:pre-wrap;padding:2px 0}
+  .docFirmaMedico{margin-top:4px}
+  .docLinea{display:flex;align-items:flex-end;gap:8px;margin:10px 0}
+  .docLinea span{white-space:nowrap;font-weight:600}
+  .docLinea i{flex:1;border-bottom:1px solid #333;font-style:normal;min-height:18px}
+  .docLineaAlta i{min-height:70px}
+  .docLineaFirma i{min-height:80px}
+  .docLineaFirma img{max-height:80px;max-width:280px;display:block}
+  .docFecha{text-align:right;margin-bottom:8px}
+  .docParrafo{text-align:justify;line-height:1.55;margin:0 0 10px;font-size:12px}
+  .docSubrayado{text-decoration:underline}
+  .docNota{font-size:10px;color:#555}
+  .docAnexo td:first-child{font-weight:700;white-space:nowrap}
+}

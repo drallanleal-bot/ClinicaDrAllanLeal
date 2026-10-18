@@ -898,15 +898,17 @@ ${occHeader(`Registros EMOP - ${occData().activeEmpresa}`, 'Evaluación médica 
     <div class="fGroup"><label>Fecha de evaluación</label><input type="date" id="occFecha" value="${v('fechaEvaluacion') || new Date().toISOString().slice(0,10)}"></div>
     <div class="fGroup"><label>Número de expediente</label><input id="occExpediente" value="${v('expediente')}" placeholder="Auto si se deja vacío"></div>
   </div>
-  <div class="fRow">
+  <div class="fRow three">
     <div class="fGroup"><label>Nombre completo</label><input id="occNombre" value="${v('nombre')}" placeholder="Nombre del colaborador"></div>
     <div class="fGroup"><label>DPI</label><input id="occDpi" value="${v('dpi')}" placeholder="Número de DPI"></div>
+    <div class="fGroup"><label>Sexo</label><select id="occSexo"><option value="" ${editing?.sexo ? '' : 'selected'}>—</option><option ${editing?.sexo === 'Masculino' ? 'selected' : ''}>Masculino</option><option ${editing?.sexo === 'Femenino' ? 'selected' : ''}>Femenino</option></select></div>
   </div>
   <div class="fRow three">
     <div class="fGroup"><label>Puesto</label><input id="occPuesto" value="${v('puesto')}"></div>
     <div class="fGroup"><label>Área</label><input id="occArea" value="${v('area')}"></div>
     <div class="fGroup"><label>Edad</label><input id="occEdad" value="${v('edad')}" type="number" min="0"></div>
   </div>
+  ${renderOccCondicionesLaborales(editing)}
   <div class="fRow three">
     <div class="fGroup"><label>PA</label><input id="occPa" value="${v('pa')}" placeholder="120/80"></div>
     <div class="fGroup"><label>FC</label><input id="occFc" value="${v('fc')}" type="number"></div>
@@ -977,6 +979,7 @@ ${occHeader(`Registros EMOP - ${occData().activeEmpresa}`, 'Evaluación médica 
       <div id="occDopingFotosPreview" class="attachList">${dopingFotos.length ? renderDopingPhotoList(dopingFotos, isEdit) : '<div class="attachHint">Aun no ha seleccionado foto.</div>'}</div>
     </div>
   </div>
+  ${renderOccDictamenYConsentimiento(editing)}
   <div style="display:flex;gap:.5rem;flex-wrap:wrap">
     <button class="btn btn-primary" onclick="guardarOcupacionalRegistro()">${isEdit ? 'Actualizar evaluación' : 'Guardar evaluación'}</button>
     ${isEdit ? '<button class="btn btn-outline" onclick="cancelarEdicionOcupacionalRegistro()">Cancelar edición</button>' : ''}
@@ -989,12 +992,17 @@ ${occHeader(`Registros EMOP - ${occData().activeEmpresa}`, 'Evaluación médica 
   </div>
   ${nombreFilter ? `<div style="display:flex;justify-content:flex-end;margin-bottom:.75rem"><button class="btn btn-sm btn-outline" onclick="clearOcupRegistrosFilters()">Limpiar búsqueda</button></div>` : ''}
   <table><thead><tr><th>Acción</th><th>Fecha</th><th>Planta</th><th>Expediente</th><th>Nombre</th><th>DPI</th><th>Puesto</th><th>Área</th><th>IMC</th><th>Ruffier</th><th>Aptitud</th><th>Doping</th></tr></thead>
-  <tbody>${records.slice().reverse().map(r => `<tr><td style="white-space:nowrap"><button class="btn btn-sm btn-primary" onclick="editarOcupacionalRegistro('${r.id}')">Editar</button> <button class="btn btn-sm btn-outline" onclick="borrarOcupacionalRegistro('${r.id}')">Borrar</button></td><td>${fmtF(r.fechaEvaluacion)}</td><td>${escapeHtml(r.planta)}</td><td>${escapeHtml(r.expediente)}</td><td>${escapeHtml(r.nombre)}</td><td>${escapeHtml(r.dpi||'—')}</td><td>${escapeHtml(r.puesto||'—')}</td><td>${escapeHtml(r.area||'—')}</td><td>${escapeHtml(r.imc||'—')}</td><td>${r.ruffierNoAplica || r.ruffierClasificacion === 'NO APLICA' ? 'NO APLICA' : (r.ruffierIndice ? `${escapeHtml(r.ruffierIndice)} · ${escapeHtml(r.ruffierClasificacion)}` : '—')}</td><td><span class="badge ${occAptClass(r.aptitudLaboral)}">${escapeHtml(r.aptitudLaboral)}</span></td><td>${escapeHtml(r.dopingResultado || 'Pendiente')}${r.dopingResultado === 'Positivo' && Array.isArray(r.dopingSustancias) && r.dopingSustancias.length ? `<br><small>${escapeHtml(r.dopingSustancias.join(', '))}</small>` : ''}${r.dopingResultado === 'Positivo' ? `<div style="margin-top:.35rem">${dopingPhotoPreview(r.dopingFotos)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="12" style="text-align:center;color:#aaa;padding:1rem">No hay registros con esos filtros.</td></tr>'}</tbody></table>
+  <tbody>${records.slice().reverse().map(r => `<tr><td style="white-space:nowrap"><button class="btn btn-sm btn-primary" onclick="editarOcupacionalRegistro('${r.id}')">Editar</button> <button class="btn btn-sm btn-outline" onclick="borrarOcupacionalRegistro('${r.id}')">Borrar</button><br><button class="btn btn-sm btn-outline" style="margin-top:.3rem" onclick="imprimirDocumentoOcupacional('${r.id}','evaluacion')">📄 Evaluación</button> <button class="btn btn-sm btn-outline" style="margin-top:.3rem" onclick="imprimirDocumentoOcupacional('${r.id}','consentimiento')">✍️ Consentimiento${r.consentimientoFirma ? ' ✓' : ''}</button></td><td>${fmtF(r.fechaEvaluacion)}</td><td>${escapeHtml(r.planta)}</td><td>${escapeHtml(r.expediente)}</td><td>${escapeHtml(r.nombre)}</td><td>${escapeHtml(r.dpi||'—')}</td><td>${escapeHtml(r.puesto||'—')}</td><td>${escapeHtml(r.area||'—')}</td><td>${escapeHtml(r.imc||'—')}</td><td>${r.ruffierNoAplica || r.ruffierClasificacion === 'NO APLICA' ? 'NO APLICA' : (r.ruffierIndice ? `${escapeHtml(r.ruffierIndice)} · ${escapeHtml(r.ruffierClasificacion)}` : '—')}</td><td><span class="badge ${occAptClass(r.aptitudLaboral)}">${escapeHtml(r.aptitudLaboral)}</span></td><td>${escapeHtml(r.dopingResultado || 'Pendiente')}${r.dopingResultado === 'Positivo' && Array.isArray(r.dopingSustancias) && r.dopingSustancias.length ? `<br><small>${escapeHtml(r.dopingSustancias.join(', '))}</small>` : ''}${r.dopingResultado === 'Positivo' ? `<div style="margin-top:.35rem">${dopingPhotoPreview(r.dopingFotos)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="12" style="text-align:center;color:#aaa;padding:1rem">No hay registros con esos filtros.</td></tr>'}</tbody></table>
 </div>`);
   setTimeout(() => {
     updateOccImc();
     updateRuffierMode();
     updateDopingOptions();
+    initOccFirmaPad();
+    document.getElementById('occNombre')?.addEventListener('input', e => {
+      const nombre = document.getElementById('occConsNombre');
+      if (nombre) nombre.textContent = e.target.value.trim() || '(nombre del trabajador)';
+    });
   }, 0);
 }
 async function guardarOcupacionalRegistro() {
@@ -1051,6 +1059,7 @@ async function guardarOcupacionalRegistro() {
     tratamiento:document.getElementById('occTratamiento').value,
     dopingResultado,
     dopingSustancias,
+    ...camposDocumentosOcupacionales(),
     syncKey:occRecordKey({ expediente, planta, fechaEvaluacion:fecha, dpi:document.getElementById('occDpi').value.trim(), nombre }),
     createdAt:isEdit ? (records[editIndex].createdAt || nowIso) : nowIso,
     updatedAt:nowIso
@@ -1059,7 +1068,7 @@ async function guardarOcupacionalRegistro() {
   formRegistro.dopingFotos = dopingResultado === 'Positivo'
     ? await uploadOcupDopingFotos(formRegistro, previousDopingFotos)
     : [];
-  const registro = isEdit ? mergeOcupRegistro(baseRegistro, formRegistro, true) : formRegistro;
+  const registro = aplicarFirmaBorrada(isEdit ? mergeOcupRegistro(baseRegistro, formRegistro, true) : formRegistro);
   if (isEdit) records[editIndex] = registro;
   else {
     records.push(registro);
