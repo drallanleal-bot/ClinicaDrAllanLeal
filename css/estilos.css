@@ -828,3 +828,78 @@ tr:hover td{
   .docNota{font-size:10px;color:#555}
   .docAnexo td:first-child{font-weight:700;white-space:nowrap}
 }
+/* Registros EMOP: cuadros de inicio, formulario por secciones y listado por jornada */
+.occRegTiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.85rem;margin-bottom:1rem}
+.occRegTile{display:flex;align-items:center;gap:.9rem;text-align:left;padding:1.1rem 1.25rem;border:1.5px solid var(--border);border-radius:12px;background:#fff;cursor:pointer;font-family:inherit;color:var(--ink);box-shadow:var(--shadow);transition:border-color .15s,background .15s;min-height:84px}
+.occRegTile:hover{border-color:var(--green-mid);background:#f7fbf9}
+.occRegTile.activo{border:2px solid var(--green);background:var(--green-light)}
+.occRegTileIcono{font-size:30px;line-height:1}
+.occRegTile strong{display:block;font-size:16px;color:var(--green-dark)}
+.occRegTile .occMini{display:block;font-size:13px;color:var(--muted);margin-top:.15rem}
+.card.occRegForm{overflow:visible}
+.occRegFormHead{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin-bottom:.9rem}
+.occRegFormHead .occMini{font-size:13px;color:var(--green-dark);font-weight:600}
+.occPasos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.55rem;margin-bottom:1.1rem}
+.occPasoTile{position:relative;display:flex;align-items:center;gap:.55rem;text-align:left;padding:.75rem .8rem;border:1.5px solid var(--border);border-radius:10px;background:#fff;cursor:pointer;font-family:inherit;color:var(--ink);min-height:64px;transition:border-color .15s,background .15s}
+.occPasoTile:hover{border-color:var(--blue)}
+.occPasoNum{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:#edf1ef;color:var(--muted);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.occPasoIcono{font-size:20px;line-height:1}
+.occPasoTexto{min-width:0}
+.occPasoTexto strong{display:block;font-size:13px;line-height:1.25}
+.occPasoTexto .occPasoCorto{display:none}
+.occPasoTexto .occMini{display:block;font-size:11.5px;color:var(--muted);line-height:1.25;margin-top:.1rem}
+.occPasoTile.activo{border:2px solid var(--blue);background:var(--blue-light)}
+.occPasoTile.activo .occPasoNum{background:var(--blue);color:#fff}
+.occPasoTile.listo{border-color:#9fd3b9;background:var(--green-light)}
+.occPasoTile.listo .occPasoNum{background:var(--green);color:#fff;font-size:0}
+.occPasoTile.listo .occPasoNum::after{content:'✓';font-size:13px}
+.occPaso{border:1.5px solid var(--border);border-radius:12px;padding:1rem 1.1rem;background:#fff}
+.occPaso[hidden]{display:none}
+.occPasoTitulo{font-size:17px;font-weight:700;color:var(--green-dark);margin-bottom:.9rem;display:flex;align-items:center;gap:.45rem}
+.occSubtitulo{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--blue);margin:.6rem 0 .5rem}
+.occPasoNav{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;margin-top:1rem;padding-top:.85rem;border-top:1px solid var(--border)}
+.occRegGuardarBar{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:1rem -1.25rem -1.25rem;padding:.8rem 1.25rem;background:#fff;border-top:1px solid var(--border);border-radius:0 0 8px 8px;box-shadow:0 -6px 18px rgba(16,31,47,.06)}
+.occRegBuscar{display:flex;gap:.5rem;align-items:center;margin-bottom:.9rem}
+.occRegBuscar input{flex:1;min-width:0;font-size:15px;padding:10px 12px}
+.occJornada{border:1.5px solid var(--border);border-radius:10px;margin-bottom:.6rem;background:#fff;overflow:hidden}
+.occJornada>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;padding:.85rem 1rem;background:#f7faf8;user-select:none}
+.occJornada>summary::-webkit-details-marker{display:none}
+.occJornada>summary::before{content:'▸';color:var(--green);transition:transform .15s;display:inline-block;margin-right:-.2rem}
+.occJornada[open]>summary::before{transform:rotate(90deg)}
+.occJornada[open]>summary{border-bottom:1px solid var(--border)}
+.occJornadaTitulo{flex:1;font-weight:700;color:var(--green-dark);font-size:15px}
+.occJornadaResumen{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.occJornadaTotal{font-size:13px;color:var(--muted)}
+.occRegFila{border-top:1px solid var(--border)}
+.occRegFila:first-child{border-top:0}
+.occRegFila>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;padding:.7rem 1rem}
+.occRegFila>summary::-webkit-details-marker{display:none}
+.occRegFila>summary:hover{background:#f7fbf9}
+.occRegFila[open]>summary{background:#f3f8f5}
+.occRegFila.resaltada>summary{background:#fff8e6}
+.occRegFilaNombre{min-width:0;flex:1}
+.occRegFilaNombre strong{display:block;font-size:14.5px}
+.occRegFilaNombre .occMini{display:block;font-size:12.5px;color:var(--muted)}
+.occRegFilaMarcas{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+.cardTitle .occMini{font-size:12px;font-weight:400;color:#888;text-transform:none;letter-spacing:0;margin-left:.35rem}
+.occRegFirmado{font-size:12px;color:var(--green)}
+.occRegFilaDetalle{padding:.25rem 1rem .9rem;background:#fbfdfc}
+.occRegDatos{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.5rem .9rem;font-size:13.5px;margin-bottom:.7rem}
+.occRegDatos span{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.occRegAcciones{display:flex;gap:.45rem;flex-wrap:wrap}
+.occRegBorrar{margin-left:auto;color:var(--red)}
+.occRegVacio{text-align:center;color:#888;padding:1.5rem}
+@media(max-width:760px){
+  .occPasos{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .occPasoTexto .occMini{display:none}
+  .occPasoIcono{display:none}
+  .occPasoTile{padding:.6rem .55rem;min-height:52px;gap:.45rem}
+  .occPasoTexto strong{font-size:13px}
+  .occPasoTexto .occPasoLargo{display:none}
+  .occPasoTexto .occPasoCorto{display:block}
+  .occRegDatos{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .occRegTile{min-height:70px;padding:.9rem 1rem}
+  .occRegGuardarBar .attachHint{display:none}
+  .occRegGuardarBar .btn{flex:1;justify-content:center}
+  .occRegBorrar{margin-left:0}
+}

@@ -604,7 +604,7 @@ function occHeader(title, subtitle) {
     <div style="display:flex;gap:.5rem;flex-wrap:wrap">
       <button class="btn btn-outline" onclick="openOccupationalScansFolder()">Abrir OneDrive</button>
       ${isOcupViewer() ? '' : `<button class="btn btn-primary" onclick="forceOccupationalCloudSync()">Subir data a Firebase</button>`}
-      ${isOcupViewer() ? '' : `<button class="btn btn-primary" onclick="goTo('occRegistros')">+ Registro EMOP</button>`}
+      ${isOcupViewer() ? '' : `<button class="btn btn-primary" onclick="occRegAbrir('nueva')">+ Registro EMOP</button>`}
     </div>
   </div>`;
 }
@@ -869,16 +869,180 @@ ${occHeader(`Salud Ocupacional - ${occData().activeEmpresa}`, 'Control de jornad
   <tbody>${(activeOccCompany().fileIndex || []).slice(0,25).map(f => `<tr><td>${f.nombreArchivo}</td><td>${f.ruta}</td><td>${f.tamano}</td></tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:#aaa;padding:1rem">Aún no se ha indexado una carpeta.</td></tr>'}</tbody></table>
 </div>`);
 }
-function renderOcupRegistros() {
-  if (isOcupViewer()) { renderOcupDashboard(); return; }
-  const allRecords = occData().registros;
-  const nombreFilter = occRegistrosFilters.nombre || '';
-  const records = occFilteredRecords('', '', 'TODOS', { nombre:nombreFilter });
-  const editing = allRecords.find(r => String(r.id) === String(editingOcupRegistroId));
+// ── Registros EMOP: cuadros de inicio, formulario por secciones y listado por jornada ──
+// occRegVista: 'inicio' (solo los dos cuadros), 'nueva' (formulario) o 'lista' (evaluaciones guardadas).
+let occRegVista = 'inicio';
+let occRegPaso = 1;
+let occRegPasosVistos = new Set();
+let occRegJornadasAbiertas = null;
+let occRegFilasAbiertas = new Set();
+let occRegResaltar = null;
+let occRegFirmaLista = false;
+const occRegUltimos = { planta:'', fecha:'' };
+const OCC_REG_PASOS = [
+  { n:1, icono:'👤', titulo:'Trabajador', corto:'Trabajador', sub:'Datos personales y puesto' },
+  { n:2, icono:'🏭', titulo:'Condiciones laborales', corto:'Condiciones', sub:'Exposición en el puesto' },
+  { n:3, icono:'❤️', titulo:'Signos vitales', corto:'Signos', sub:'PA, FC, peso, IMC' },
+  { n:4, icono:'📋', titulo:'Historia y antecedentes', corto:'Historia', sub:'Motivo, historia, antecedentes' },
+  { n:5, icono:'🩺', titulo:'Examen y diagnóstico', corto:'Examen', sub:'Examen físico y tratamiento' },
+  { n:6, icono:'🏃', titulo:'Ruffier y doping', corto:'Pruebas', sub:'Pruebas complementarias' },
+  { n:7, icono:'✅', titulo:'Aptitud y consentimiento', corto:'Aptitud', sub:'Dictamen y firma' }
+];
+
+function occRegAbrir(vista) {
+  if (vista === 'nueva' && editingOcupRegistroId) editingOcupRegistroId = null;
+  occRegVista = vista;
+  occRegPaso = 1;
+  occRegPasosVistos = new Set();
+  if (currentPage !== 'occRegistros') goTo('occRegistros');
+  else renderOcupRegistros();
+  document.querySelector('.main')?.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function occRegValor(id) { return String(document.getElementById(id)?.value || '').trim(); }
+
+// Una sección se marca en verde cuando tiene sus datos principales o ya se pasó por ella.
+function occRegPasoCompleto(n) {
+  switch (n) {
+    case 1: return !!(occRegValor('occNombre') && occRegValor('occFecha'));
+    case 2: return !!document.querySelector('input[name^="occCond_"]:checked');
+    case 3: return !!(occRegValor('occPa') || occRegValor('occFc') || occRegValor('occPeso'));
+    case 5: return !!occRegValor('occDiagnosticos');
+    case 6: return !!(document.getElementById('occRuffierNoAplica')?.checked || occRegValor('occRuffierResultado') || ['Negativo','Positivo'].includes(occRegValor('occDopingResultado')));
+    case 7: return !!(document.getElementById('occFirmaGuardada')?.getAttribute('src') || occFirmaTrazada);
+    default: return false;
+  }
+}
+
+function occRegActualizarPasos() {
+  OCC_REG_PASOS.forEach(p => {
+    const tile = document.getElementById(`occPasoTile${p.n}`);
+    if (!tile) return;
+    const listo = occRegPasoCompleto(p.n) || (occRegPasosVistos.has(p.n) && p.n !== occRegPaso);
+    tile.classList.toggle('activo', p.n === occRegPaso);
+    tile.classList.toggle('listo', listo && p.n !== occRegPaso);
+    tile.setAttribute('aria-current', p.n === occRegPaso ? 'step' : 'false');
+  });
+  const nombre = occRegValor('occNombre');
+  const quien = document.getElementById('occRegQuien');
+  if (quien) quien.textContent = nombre ? ` · ${nombre}` : '';
+}
+
+function occRegIrPaso(n) {
+  if (n < 1 || n > OCC_REG_PASOS.length) return;
+  occRegPasosVistos.add(occRegPaso);
+  occRegPaso = n;
+  document.querySelectorAll('.occPaso').forEach(el => { el.hidden = Number(el.dataset.paso) !== n; });
+  if (n === 7 && !occRegFirmaLista) {
+    occRegFirmaLista = true;
+    initOccFirmaPad();
+  }
+  occRegActualizarPasos();
+  const form = document.getElementById('occRegForm');
+  if (form) form.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function occRegToggleJornada(el) {
+  if (!occRegJornadasAbiertas) occRegJornadasAbiertas = new Set();
+  if (el.open) occRegJornadasAbiertas.add(el.dataset.key);
+  else occRegJornadasAbiertas.delete(el.dataset.key);
+}
+
+function occRegToggleFila(el) {
+  if (el.open) occRegFilasAbiertas.add(el.dataset.id);
+  else occRegFilasAbiertas.delete(el.dataset.id);
+}
+
+function occRegJornadaKey(r) { return `${r.fechaEvaluacion || ''}|${r.planta || ''}`; }
+
+function occRegAgruparPorJornada(records) {
+  const grupos = new Map();
+  records.forEach(r => {
+    const key = occRegJornadaKey(r);
+    if (!grupos.has(key)) grupos.set(key, { key, fecha:r.fechaEvaluacion || '', planta:r.planta || '', registros:[] });
+    grupos.get(key).registros.push(r);
+  });
+  return Array.from(grupos.values())
+    .map(g => ({ ...g, registros:g.registros.slice().reverse() }))
+    .sort((a, b) => b.fecha.localeCompare(a.fecha) || a.planta.localeCompare(b.planta));
+}
+
+function occRegRuffierTexto(r) {
+  if (r.ruffierNoAplica || r.ruffierClasificacion === 'NO APLICA') return 'NO APLICA';
+  return r.ruffierIndice ? `${escapeHtml(r.ruffierIndice)} · ${escapeHtml(r.ruffierClasificacion)}` : '—';
+}
+
+function renderOccRegFila(r) {
+  const abierta = occRegFilasAbiertas.has(String(r.id)) || String(occRegResaltar) === String(r.id);
+  const dopingPositivo = r.dopingResultado === 'Positivo';
+  const sustancias = dopingPositivo && Array.isArray(r.dopingSustancias) && r.dopingSustancias.length ? ` · ${escapeHtml(r.dopingSustancias.join(', '))}` : '';
+  return `<details class="occRegFila${String(occRegResaltar) === String(r.id) ? ' resaltada' : ''}" data-id="${escapeHtml(String(r.id))}" ontoggle="occRegToggleFila(this)" ${abierta ? 'open' : ''}>
+    <summary>
+      <span class="occRegFilaNombre"><strong>${escapeHtml(r.nombre || '(sin nombre)')}</strong><span class="occMini">${escapeHtml(r.puesto || 'Sin puesto')} · ${escapeHtml(r.expediente || '—')}</span></span>
+      <span class="occRegFilaMarcas">
+        ${dopingPositivo ? '<span class="badge aptNoApto" title="Doping positivo">Doping +</span>' : ''}
+        ${r.consentimientoFirma ? '<span class="occRegFirmado" title="Consentimiento firmado">✍️ ✓</span>' : ''}
+        <span class="badge ${occAptClass(r.aptitudLaboral)}">${escapeHtml(r.aptitudLaboral || '—')}</span>
+      </span>
+    </summary>
+    <div class="occRegFilaDetalle">
+      <div class="occRegDatos">
+        <div><span>DPI</span>${escapeHtml(r.dpi || '—')}</div>
+        <div><span>Área</span>${escapeHtml(r.area || '—')}</div>
+        <div><span>Edad</span>${escapeHtml(r.edad || '—')}</div>
+        <div><span>IMC</span>${escapeHtml(r.imc || '—')}</div>
+        <div><span>Ruffier</span>${occRegRuffierTexto(r)}</div>
+        <div><span>Doping</span>${escapeHtml(r.dopingResultado || 'Pendiente')}${sustancias}</div>
+      </div>
+      ${dopingPositivo ? `<div style="margin:.2rem 0 .6rem">${dopingPhotoPreview(r.dopingFotos)}</div>` : ''}
+      <div class="occRegAcciones">
+        <button class="btn btn-sm btn-primary" onclick="editarOcupacionalRegistro('${r.id}')">Editar</button>
+        <button class="btn btn-sm btn-outline" onclick="imprimirDocumentoOcupacional('${r.id}','evaluacion')">📄 Evaluación</button>
+        <button class="btn btn-sm btn-outline" onclick="imprimirDocumentoOcupacional('${r.id}','consentimiento')">✍️ Consentimiento${r.consentimientoFirma ? ' ✓' : ''}</button>
+        <button class="btn btn-sm btn-outline occRegBorrar" onclick="borrarOcupacionalRegistro('${r.id}')">Borrar</button>
+      </div>
+    </div>
+  </details>`;
+}
+
+function renderOccRegLista(records, allRecords, nombreFilter) {
+  const grupos = occRegAgruparPorJornada(records);
+  if (!occRegJornadasAbiertas) occRegJornadasAbiertas = new Set(grupos.length ? [grupos[0].key] : []);
+  const resaltarKey = occRegResaltar ? occRegJornadaKey(allRecords.find(r => String(r.id) === String(occRegResaltar)) || {}) : '';
+  if (resaltarKey) occRegJornadasAbiertas.add(resaltarKey);
+  const contarApt = (regs, apt) => regs.filter(r => r.aptitudLaboral === apt).length;
+  return `<div class="card">
+  <div class="cardTitle">Evaluaciones guardadas <span class="occMini">${records.length}${records.length !== allRecords.length ? ` de ${allRecords.length}` : ''} en ${grupos.length} ${grupos.length === 1 ? 'jornada' : 'jornadas'}</span></div>
+  <div class="occRegBuscar">
+    <input id="occRegNombreSearch" value="${escapeHtml(nombreFilter)}" placeholder="🔍 Buscar por nombre del colaborador" oninput="updateOcupRegistrosFilter('nombre', this.value)" aria-label="Buscar por nombre">
+    ${nombreFilter ? '<button class="btn btn-sm btn-outline" onclick="clearOcupRegistrosFilters()">Limpiar</button>' : ''}
+  </div>
+  ${grupos.map(g => {
+    const abierta = !!nombreFilter || occRegJornadasAbiertas.has(g.key);
+    const noAptos = contarApt(g.registros, 'No apto') + contarApt(g.registros, 'No apto con restricción');
+    const restriccion = contarApt(g.registros, 'Apto con restricción');
+    return `<details class="occJornada" data-key="${escapeHtml(g.key)}" ontoggle="occRegToggleJornada(this)" ${abierta ? 'open' : ''}>
+      <summary>
+        <span class="occJornadaTitulo">${escapeHtml(g.planta || 'Sin planta')} · ${fmtF(g.fecha)}</span>
+        <span class="occJornadaResumen">
+          ${restriccion ? `<span class="badge aptRestriccion">${restriccion} con restricción</span>` : ''}
+          ${noAptos ? `<span class="badge aptNoApto">${noAptos} no apto${noAptos === 1 ? '' : 's'}</span>` : ''}
+          <span class="occJornadaTotal">${g.registros.length} ${g.registros.length === 1 ? 'evaluación' : 'evaluaciones'}</span>
+        </span>
+      </summary>
+      <div class="occJornadaFilas">${g.registros.map(renderOccRegFila).join('')}</div>
+    </details>`;
+  }).join('') || `<div class="occRegVacio">${nombreFilter ? 'No hay evaluaciones con ese nombre.' : 'Aún no hay evaluaciones guardadas. Use «Nueva evaluación» para registrar la primera.'}</div>`}
+</div>`;
+}
+
+function renderOccRegFormulario(editing) {
   const isEdit = !!editing;
   const v = key => escapeHtml(editing?.[key] ?? '');
   const defaultValue = (key, fallback) => escapeHtml(isEdit ? (editing?.[key] ?? '') : fallback);
-  const selectedPlant = editing?.planta || occData().plantas[0] || 'MIXCO';
+  const plantaDefault = occData().plantas.includes(occRegUltimos.planta) ? occRegUltimos.planta : (occData().plantas[0] || 'MIXCO');
+  const selectedPlant = editing?.planta || plantaDefault;
+  const fechaDefault = isEdit ? v('fechaEvaluacion') : (occRegUltimos.fecha || todayLocalISO());
   const selectedApt = editing?.aptitudLaboral || 'Apto';
   const aptSelected = value => selectedApt === value ? 'selected' : '';
   const ruffierNoAplica = editing?.ruffierNoAplica === true || editing?.ruffierClasificacion === 'NO APLICA';
@@ -889,13 +1053,32 @@ function renderOcupRegistros() {
   const dopingFotos = Array.isArray(editing?.dopingFotos) ? editing.dopingFotos : [];
   const dopingSelected = value => selectedDoping === value ? 'selected' : '';
   const dopingChecked = value => dopingSustancias.includes(value) ? 'checked' : '';
-  setC(`
-${occHeader(`Registros EMOP - ${occData().activeEmpresa}`, 'Evaluación médica ocupacional por planta y fecha.')}
-<div class="card">
-  <div class="cardTitle">${isEdit ? 'Editar registro de evaluación médica ocupacional' : 'Nuevo registro de evaluación médica ocupacional'}</div>
+  const paso = (n, contenido) => {
+    const info = OCC_REG_PASOS[n - 1];
+    return `<section class="occPaso" data-paso="${n}" ${n === occRegPaso ? '' : 'hidden'} aria-label="${escapeHtml(info.titulo)}">
+      <div class="occPasoTitulo"><span>${info.icono}</span> ${n}. ${escapeHtml(info.titulo)}</div>
+      ${contenido}
+      <div class="occPasoNav">
+        ${n > 1 ? `<button type="button" class="btn btn-outline" onclick="occRegIrPaso(${n - 1})">← Anterior</button>` : '<span></span>'}
+        ${n < OCC_REG_PASOS.length ? `<button type="button" class="btn btn-blue" onclick="occRegIrPaso(${n + 1})">Siguiente: ${escapeHtml(OCC_REG_PASOS[n].titulo)} →</button>` : '<span></span>'}
+      </div>
+    </section>`;
+  };
+  return `<div class="card occRegForm" id="occRegForm">
+  <div class="occRegFormHead">
+    <div class="cardTitle" style="margin:0">${isEdit ? 'Editando evaluación' : 'Nueva evaluación'}<span class="occMini" id="occRegQuien"></span></div>
+    ${isEdit ? '<button class="btn btn-sm btn-outline" onclick="cancelarEdicionOcupacionalRegistro()">Cancelar edición</button>' : ''}
+  </div>
+  <div class="occPasos" role="list">
+    ${OCC_REG_PASOS.map(p => `<button type="button" role="listitem" class="occPasoTile" id="occPasoTile${p.n}" onclick="occRegIrPaso(${p.n})">
+      <span class="occPasoNum">${p.n}</span><span class="occPasoIcono" aria-hidden="true">${p.icono}</span>
+      <span class="occPasoTexto"><strong class="occPasoLargo">${escapeHtml(p.titulo)}</strong><strong class="occPasoCorto">${escapeHtml(p.corto)}</strong><span class="occMini">${escapeHtml(p.sub)}</span></span>
+    </button>`).join('')}
+  </div>
+  ${paso(1, `
   <div class="fRow three">
     <div class="fGroup"><label>Planta</label><select id="occPlanta">${occPlantsOptions(selectedPlant)}</select></div>
-    <div class="fGroup"><label>Fecha de evaluación</label><input type="date" id="occFecha" value="${v('fechaEvaluacion') || new Date().toISOString().slice(0,10)}"></div>
+    <div class="fGroup"><label>Fecha de evaluación</label><input type="date" id="occFecha" value="${fechaDefault}"></div>
     <div class="fGroup"><label>Número de expediente</label><input id="occExpediente" value="${v('expediente')}" placeholder="Auto si se deja vacío"></div>
   </div>
   <div class="fRow three">
@@ -907,8 +1090,9 @@ ${occHeader(`Registros EMOP - ${occData().activeEmpresa}`, 'Evaluación médica 
     <div class="fGroup"><label>Puesto</label><input id="occPuesto" value="${v('puesto')}"></div>
     <div class="fGroup"><label>Área</label><input id="occArea" value="${v('area')}"></div>
     <div class="fGroup"><label>Edad</label><input id="occEdad" value="${v('edad')}" type="number" min="0"></div>
-  </div>
-  ${renderOccCondicionesLaborales(editing)}
+  </div>`)}
+  ${paso(2, renderOccCondicionesLaborales(editing, { plano:true }))}
+  ${paso(3, `
   <div class="fRow three">
     <div class="fGroup"><label>PA</label><input id="occPa" value="${v('pa')}" placeholder="120/80"></div>
     <div class="fGroup"><label>FC</label><input id="occFc" value="${v('fc')}" type="number"></div>
@@ -923,12 +1107,12 @@ ${occHeader(`Registros EMOP - ${occData().activeEmpresa}`, 'Evaluación médica 
     <div class="fGroup"><label>Peso kg</label><input id="occPeso" value="${v('peso')}" type="number" step="0.1" oninput="updateOccImc()"></div>
     <div class="fGroup"><label>Altura m o cm</label><input id="occAltura" value="${v('altura')}" type="number" step="0.01" oninput="updateOccImc()"></div>
     <div class="fGroup"><label>IMC automático</label><input id="occImc" value="${v('imc')}" readonly></div>
-  </div>
+  </div>`)}
+  ${paso(4, `
   <div class="fRow">
     <div class="fGroup"><label>Motivo de consulta</label><textarea id="occMotivo" rows="2">${defaultValue('motivoConsulta', OCC_DEFAULT_MOTIVO)}</textarea></div>
     <div class="fGroup"><label>Historia enfermedad actual</label><textarea id="occHistoria" rows="5">${defaultValue('historiaActual', OCC_DEFAULT_HISTORIA)}</textarea></div>
   </div>
-  <div class="cardTitle" style="margin-top:.35rem">Antecedentes</div>
   <div class="fRow">
     <div class="fGroup"><label>Antecedentes familiares</label><textarea id="occAntecedentesFamiliares" rows="2">${defaultValue('antecedentesFamiliares', OCC_DEFAULT_ANTECEDENTE)}</textarea></div>
     <div class="fGroup"><label>Antecedentes médicos</label><textarea id="occAntecedentesMedicos" rows="2">${defaultValue('antecedentesMedicos', OCC_DEFAULT_ANTECEDENTE)}</textarea></div>
@@ -936,24 +1120,27 @@ ${occHeader(`Registros EMOP - ${occData().activeEmpresa}`, 'Evaluación médica 
   <div class="fRow">
     <div class="fGroup"><label>Antecedentes alérgicos</label><textarea id="occAntecedentesAlergicos" rows="2">${defaultValue('antecedentesAlergicos', OCC_DEFAULT_ANTECEDENTE)}</textarea></div>
     <div class="fGroup"><label>Antecedentes quirúrgicos/traumáticos</label><textarea id="occAntecedentesQuirurgicos" rows="2">${defaultValue('antecedentesQuirurgicos', OCC_DEFAULT_ANTECEDENTE)}</textarea></div>
-  </div>
+  </div>`)}
+  ${paso(5, `
   <div class="fRow">
     <div class="fGroup"><label>Examen físico</label><textarea id="occExamen" rows="10">${defaultValue('examenFisico', OCC_DEFAULT_EXAMEN)}</textarea></div>
-    <div class="fGroup"><label>Diagnósticos</label><textarea id="occDiagnosticos" rows="2">${v('diagnosticos')}</textarea></div>
-  </div>
+    <div class="fGroup"><label>Diagnósticos</label><textarea id="occDiagnosticos" rows="4">${v('diagnosticos')}</textarea>
+      <label style="margin-top:.75rem">Tratamiento</label><input id="occTratamiento" value="${v('tratamiento')}"></div>
+  </div>`)}
+  ${paso(6, `
+  <div class="occSubtitulo">Prueba de Ruffier</div>
   <div class="fRow three">
-    <div class="fGroup"><label>Aptitud laboral</label><select id="occAptitud"><option ${aptSelected('Apto')}>Apto</option><option ${aptSelected('Apto con restricción')}>Apto con restricción</option><option ${aptSelected('No apto con restricción')}>No apto con restricción</option><option ${aptSelected('No apto')}>No apto</option></select></div>
     <div class="fGroup"><label>Ruffier reposo P0</label><input id="occRuffierReposo" value="${v('ruffierReposo')}" type="number" oninput="updateRuffier()" placeholder="Pulso en reposo" ${ruffierDisabled}></div>
     <div class="fGroup"><label>Ruffier esfuerzo P1</label><input id="occRuffierEsfuerzo" value="${v('ruffierEsfuerzo')}" type="number" oninput="updateRuffier()" placeholder="Pulso post-ejercicio" ${ruffierDisabled}></div>
-  </div>
-  <div class="fRow three">
     <div class="fGroup"><label>Ruffier recuperación P2</label><input id="occRuffierRecuperacion" value="${v('ruffierRecuperacion')}" type="number" oninput="updateRuffier()" placeholder="Pulso al minuto" ${ruffierDisabled}></div>
-    <div class="fGroup"><label>Índice y clasificación Ruffier</label><input id="occRuffierResultado" value="${escapeHtml(ruffierDisplay)}" readonly><label style="display:flex;align-items:center;gap:.4rem;margin-top:.45rem;font-size:13px;color:#4d5b55"><input type="checkbox" id="occRuffierNoAplica" onchange="updateRuffierMode()" ${ruffierNoAplica ? 'checked' : ''}> NO APLICA</label></div>
-    <div class="fGroup"><label>Tratamiento</label><input id="occTratamiento" value="${v('tratamiento')}"></div>
   </div>
   <div class="fRow">
+    <div class="fGroup"><label>Índice y clasificación Ruffier</label><input id="occRuffierResultado" value="${escapeHtml(ruffierDisplay)}" readonly><label style="display:flex;align-items:center;gap:.4rem;margin-top:.45rem;font-size:13px;color:#4d5b55"><input type="checkbox" id="occRuffierNoAplica" onchange="updateRuffierMode()" ${ruffierNoAplica ? 'checked' : ''}> NO APLICA</label></div>
+  </div>
+  <div class="occSubtitulo">Doping</div>
+  <div class="fRow">
     <div class="fGroup">
-      <label>Doping</label>
+      <label>Resultado</label>
       <select id="occDopingResultado" onchange="updateDopingOptions()">
         <option ${dopingSelected('Pendiente')}>Pendiente</option>
         <option ${dopingSelected('Negativo')}>Negativo</option>
@@ -971,34 +1158,60 @@ ${occHeader(`Registros EMOP - ${occData().activeEmpresa}`, 'Evaluación médica 
         <label><input type="checkbox" name="occDopingSustancia" value="Morfina / Opiáceos" ${dopingChecked('Morfina / Opiáceos')}> Morfina / Opiáceos</label>
       </div>
     </div>
-    <div class="fGroup" id="occDopingFotoBox" style="display:${selectedDoping === 'Positivo' ? 'block' : 'none'}">
-      <label>Foto del resultado positivo</label>
-      <input type="file" id="occDopingFotos" accept="image/*" multiple onchange="previewOcupDopingFotos()">
-      <div style="margin-top:.55rem;display:flex;gap:.5rem;flex-wrap:wrap"><button type="button" class="btn btn-sm btn-outline" onclick="connectOneDriveFolder()">Conectar carpeta local OneDrive</button></div>
-      <div class="attachHint">La foto se copia en OneDrive local dentro de SALUD OCUPACIONAL / empresa / DOPING / planta / fecha.</div>
-      <div id="occDopingFotosPreview" class="attachList">${dopingFotos.length ? renderDopingPhotoList(dopingFotos, isEdit) : '<div class="attachHint">Aun no ha seleccionado foto.</div>'}</div>
-    </div>
   </div>
-  ${renderOccDictamenYConsentimiento(editing)}
-  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-    <button class="btn btn-primary" onclick="guardarOcupacionalRegistro()">${isEdit ? 'Actualizar evaluación' : 'Guardar evaluación'}</button>
-    ${isEdit ? '<button class="btn btn-outline" onclick="cancelarEdicionOcupacionalRegistro()">Cancelar edición</button>' : ''}
+  <div class="fGroup" id="occDopingFotoBox" style="display:${selectedDoping === 'Positivo' ? 'block' : 'none'}">
+    <label>Foto del resultado positivo</label>
+    <input type="file" id="occDopingFotos" accept="image/*" multiple onchange="previewOcupDopingFotos()">
+    <div style="margin-top:.55rem;display:flex;gap:.5rem;flex-wrap:wrap"><button type="button" class="btn btn-sm btn-outline" onclick="connectOneDriveFolder()">Conectar carpeta local OneDrive</button></div>
+    <div class="attachHint">La foto se copia en OneDrive local dentro de SALUD OCUPACIONAL / empresa / DOPING / planta / fecha.</div>
+    <div id="occDopingFotosPreview" class="attachList">${dopingFotos.length ? renderDopingPhotoList(dopingFotos, isEdit) : '<div class="attachHint">Aun no ha seleccionado foto.</div>'}</div>
+  </div>`)}
+  ${paso(7, `
+  <div class="fRow">
+    <div class="fGroup"><label>Aptitud laboral</label><select id="occAptitud"><option ${aptSelected('Apto')}>Apto</option><option ${aptSelected('Apto con restricción')}>Apto con restricción</option><option ${aptSelected('No apto con restricción')}>No apto con restricción</option><option ${aptSelected('No apto')}>No apto</option></select></div>
   </div>
+  ${renderOccDictamenYConsentimiento(editing, { plano:true })}`)}
+  <div class="occRegGuardarBar">
+    <span class="attachHint">Puede guardar en cualquier momento; lo que falte se completa después con «Editar».</span>
+    <button class="btn btn-primary" onclick="guardarOcupacionalRegistro()">💾 ${isEdit ? 'Actualizar evaluación' : 'Guardar evaluación'}</button>
+  </div>
+</div>`;
+}
+
+function renderOcupRegistros() {
+  if (isOcupViewer()) { renderOcupDashboard(); return; }
+  const allRecords = occData().registros;
+  const nombreFilter = occRegistrosFilters.nombre || '';
+  const records = occFilteredRecords('', '', 'TODOS', { nombre:nombreFilter });
+  const editing = allRecords.find(r => String(r.id) === String(editingOcupRegistroId));
+  if (editingOcupRegistroId && !editing) editingOcupRegistroId = null;
+  const mostrarForm = !!editing || occRegVista === 'nueva';
+  const mostrarLista = !mostrarForm && occRegVista === 'lista';
+  const tile = (vista, icono, titulo, sub, activo) => `<button type="button" class="occRegTile${activo ? ' activo' : ''}" onclick="occRegAbrir('${vista}')">
+      <span class="occRegTileIcono" aria-hidden="true">${icono}</span>
+      <span><strong>${titulo}</strong><span class="occMini">${sub}</span></span>
+    </button>`;
+  occRegFirmaLista = false;
+  setC(`
+${occHeader(`Registros EMOP - ${occData().activeEmpresa}`, 'Evaluación médica ocupacional por planta y fecha.')}
+<div class="occRegTiles">
+  ${tile('nueva', '➕', 'Nueva evaluación', 'Formulario por secciones', mostrarForm && !editing)}
+  ${tile('lista', '📋', 'Evaluaciones guardadas', `${allRecords.length} ${allRecords.length === 1 ? 'registro' : 'registros'} · buscar por nombre`, mostrarLista)}
 </div>
-<div class="card">
-  <div class="cardTitle">Registros guardados (${records.length}${records.length !== allRecords.length ? ` de ${allRecords.length}` : ''})</div>
-  <div class="fRow" style="margin-bottom:.8rem">
-    <div class="fGroup"><label>Buscar por nombre</label><input id="occRegNombreSearch" value="${escapeHtml(nombreFilter)}" placeholder="Escriba el nombre del colaborador" oninput="updateOcupRegistrosFilter('nombre', this.value)"></div>
-  </div>
-  ${nombreFilter ? `<div style="display:flex;justify-content:flex-end;margin-bottom:.75rem"><button class="btn btn-sm btn-outline" onclick="clearOcupRegistrosFilters()">Limpiar búsqueda</button></div>` : ''}
-  <table><thead><tr><th>Acción</th><th>Fecha</th><th>Planta</th><th>Expediente</th><th>Nombre</th><th>DPI</th><th>Puesto</th><th>Área</th><th>IMC</th><th>Ruffier</th><th>Aptitud</th><th>Doping</th></tr></thead>
-  <tbody>${records.slice().reverse().map(r => `<tr><td style="white-space:nowrap"><button class="btn btn-sm btn-primary" onclick="editarOcupacionalRegistro('${r.id}')">Editar</button> <button class="btn btn-sm btn-outline" onclick="borrarOcupacionalRegistro('${r.id}')">Borrar</button><br><button class="btn btn-sm btn-outline" style="margin-top:.3rem" onclick="imprimirDocumentoOcupacional('${r.id}','evaluacion')">📄 Evaluación</button> <button class="btn btn-sm btn-outline" style="margin-top:.3rem" onclick="imprimirDocumentoOcupacional('${r.id}','consentimiento')">✍️ Consentimiento${r.consentimientoFirma ? ' ✓' : ''}</button></td><td>${fmtF(r.fechaEvaluacion)}</td><td>${escapeHtml(r.planta)}</td><td>${escapeHtml(r.expediente)}</td><td>${escapeHtml(r.nombre)}</td><td>${escapeHtml(r.dpi||'—')}</td><td>${escapeHtml(r.puesto||'—')}</td><td>${escapeHtml(r.area||'—')}</td><td>${escapeHtml(r.imc||'—')}</td><td>${r.ruffierNoAplica || r.ruffierClasificacion === 'NO APLICA' ? 'NO APLICA' : (r.ruffierIndice ? `${escapeHtml(r.ruffierIndice)} · ${escapeHtml(r.ruffierClasificacion)}` : '—')}</td><td><span class="badge ${occAptClass(r.aptitudLaboral)}">${escapeHtml(r.aptitudLaboral)}</span></td><td>${escapeHtml(r.dopingResultado || 'Pendiente')}${r.dopingResultado === 'Positivo' && Array.isArray(r.dopingSustancias) && r.dopingSustancias.length ? `<br><small>${escapeHtml(r.dopingSustancias.join(', '))}</small>` : ''}${r.dopingResultado === 'Positivo' ? `<div style="margin-top:.35rem">${dopingPhotoPreview(r.dopingFotos)}</div>` : ''}</td></tr>`).join('') || '<tr><td colspan="12" style="text-align:center;color:#aaa;padding:1rem">No hay registros con esos filtros.</td></tr>'}</tbody></table>
-</div>`);
+${mostrarForm ? renderOccRegFormulario(editing) : ''}
+${mostrarLista ? renderOccRegLista(records, allRecords, nombreFilter) : ''}`);
+  occRegResaltar = null;
+  if (!mostrarForm) return;
   setTimeout(() => {
     updateOccImc();
     updateRuffierMode();
     updateDopingOptions();
-    initOccFirmaPad();
+    if (occRegPaso === 7) { occRegFirmaLista = true; initOccFirmaPad(); }
+    occRegActualizarPasos();
+    const form = document.getElementById('occRegForm');
+    form?.addEventListener('input', occRegActualizarPasos);
+    form?.addEventListener('change', occRegActualizarPasos);
+    form?.addEventListener('pointerup', () => setTimeout(occRegActualizarPasos, 0));
     document.getElementById('occNombre')?.addEventListener('input', e => {
       const nombre = document.getElementById('occConsNombre');
       if (nombre) nombre.textContent = e.target.value.trim() || '(nombre del trabajador)';
@@ -1009,7 +1222,7 @@ async function guardarOcupacionalRegistro() {
   const planta = document.getElementById('occPlanta').value;
   const fecha = document.getElementById('occFecha').value;
   const nombre = document.getElementById('occNombre').value.trim();
-  if (!fecha || !nombre) { alert('Ingrese fecha de evaluación y nombre completo.'); return; }
+  if (!fecha || !nombre) { occRegIrPaso(1); alert('Ingrese fecha de evaluación y nombre completo.'); return; }
   const records = occData().registros;
   const requestedId = editingOcupRegistroId || '';
   const provisionalId = requestedId || occData().nextRegistroId;
@@ -1077,6 +1290,13 @@ async function guardarOcupacionalRegistro() {
   }
   dedupeOcupRegistros(records);
   editingOcupRegistroId = null;
+  occRegUltimos.planta = planta;
+  occRegUltimos.fecha = fecha;
+  occRegVista = 'lista';
+  occRegPaso = 1;
+  occRegPasosVistos = new Set();
+  occRegResaltar = id;
+  occRegFilasAbiertas.add(String(id));
   normalizeStateCounters();
   await saveAppData({ backupToFolder:true });
   await saveOccupationalStateToCloud(true);
@@ -1085,11 +1305,15 @@ async function guardarOcupacionalRegistro() {
 }
 function editarOcupacionalRegistro(id) {
   editingOcupRegistroId = id;
+  occRegPaso = 1;
+  occRegPasosVistos = new Set();
   renderOcupRegistros();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.querySelector('.main')?.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function cancelarEdicionOcupacionalRegistro() {
   editingOcupRegistroId = null;
+  occRegVista = 'lista';
+  occRegPaso = 1;
   renderOcupRegistros();
 }
 async function borrarOcupacionalRegistro(id) {
@@ -1112,7 +1336,7 @@ function renderOcupEscaneres() {
   const editing = occData().scans.find(s => String(s.id) === String(editingOcupScanId));
   const isEdit = !!editing;
   const scanPlant = editing?.planta || 'MIXCO';
-  const scanFecha = editing?.fecha || new Date().toISOString().slice(0,10);
+  const scanFecha = editing?.fecha || todayLocalISO();
   const scanTipo = editing?.tipo || 'Aptitud laboral firmada';
   const scanUrl = editing?.url || '';
   const scanDirectStatus = editing?.firestoreFile?.chunkCount ? `Descarga directa lista (${editing.firestoreFile.chunkCount} parte(s), ${formatFileSize(editing.firestoreFile.size)})` : (editing?.url ? 'Abre por enlace directo de OneDrive' : 'Sin descarga directa');
@@ -1316,7 +1540,7 @@ ${occHeader('Planes de SSO', 'Archivo y respaldo de planes de salud y seguridad 
   <div class="cardTitle">Subir plan firmado</div>
   <div class="fRow">
     <div class="fGroup"><label>Empresa</label><input id="planEmpresa" value="${occData().activeEmpresa || ''}"></div>
-    <div class="fGroup"><label>Fecha</label><input id="planFecha" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="fGroup"><label>Fecha</label><input id="planFecha" type="date" value="${todayLocalISO()}"></div>
   </div>
   <div class="scanDrop"><input type="file" id="planSSOFiles" multiple accept=".pdf,.doc,.docx,image/*,.jpg,.jpeg,.png"></div>
   <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
