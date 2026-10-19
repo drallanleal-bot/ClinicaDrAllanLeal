@@ -878,6 +878,7 @@ let occRegJornadasAbiertas = null;
 let occRegFilasAbiertas = new Set();
 let occRegResaltar = null;
 let occRegFirmaLista = false;
+let occRegCondicionesGuardadas = false;
 const occRegUltimos = { planta:'', fecha:'' };
 const OCC_REG_PASOS = [
   { n:1, icono:'👤', titulo:'Trabajador', corto:'Trabajador', sub:'Datos personales y puesto' },
@@ -886,7 +887,8 @@ const OCC_REG_PASOS = [
   { n:4, icono:'📋', titulo:'Historia y antecedentes', corto:'Historia', sub:'Motivo, historia, antecedentes' },
   { n:5, icono:'🩺', titulo:'Examen y diagnóstico', corto:'Examen', sub:'Examen físico y tratamiento' },
   { n:6, icono:'🏃', titulo:'Ruffier y doping', corto:'Pruebas', sub:'Pruebas complementarias' },
-  { n:7, icono:'✅', titulo:'Aptitud y consentimiento', corto:'Aptitud', sub:'Dictamen y firma' }
+  { n:7, icono:'✅', titulo:'Aptitud laboral', corto:'Aptitud', sub:'Dictamen y recomendaciones' },
+  { n:8, icono:'✍️', titulo:'Consentimiento informado', corto:'Consentimiento', sub:'Lectura y firma' }
 ];
 
 function occRegAbrir(vista) {
@@ -905,11 +907,11 @@ function occRegValor(id) { return String(document.getElementById(id)?.value || '
 function occRegPasoCompleto(n) {
   switch (n) {
     case 1: return !!(occRegValor('occNombre') && occRegValor('occFecha'));
-    case 2: return !!document.querySelector('input[name^="occCond_"]:checked');
+    case 2: return occRegCondicionesGuardadas;
     case 3: return !!(occRegValor('occPa') || occRegValor('occFc') || occRegValor('occPeso'));
     case 5: return !!occRegValor('occDiagnosticos');
     case 6: return !!(document.getElementById('occRuffierNoAplica')?.checked || occRegValor('occRuffierResultado') || ['Negativo','Positivo'].includes(occRegValor('occDopingResultado')));
-    case 7: return !!(document.getElementById('occFirmaGuardada')?.getAttribute('src') || occFirmaTrazada);
+    case 8: return !!(document.getElementById('occFirmaGuardada')?.getAttribute('src') || occFirmaTrazada);
     default: return false;
   }
 }
@@ -933,7 +935,7 @@ function occRegIrPaso(n) {
   occRegPasosVistos.add(occRegPaso);
   occRegPaso = n;
   document.querySelectorAll('.occPaso').forEach(el => { el.hidden = Number(el.dataset.paso) !== n; });
-  if (n === 7 && !occRegFirmaLista) {
+  if (n === 8 && !occRegFirmaLista) {
     occRegFirmaLista = true;
     initOccFirmaPad();
   }
@@ -1053,6 +1055,7 @@ function renderOccRegFormulario(editing) {
   const dopingFotos = Array.isArray(editing?.dopingFotos) ? editing.dopingFotos : [];
   const dopingSelected = value => selectedDoping === value ? 'selected' : '';
   const dopingChecked = value => dopingSustancias.includes(value) ? 'checked' : '';
+  occRegCondicionesGuardadas = !!(editing && Object.keys(editing.condicionesLaborales || {}).length);
   const paso = (n, contenido) => {
     const info = OCC_REG_PASOS[n - 1];
     return `<section class="occPaso" data-paso="${n}" ${n === occRegPaso ? '' : 'hidden'} aria-label="${escapeHtml(info.titulo)}">
@@ -1170,7 +1173,8 @@ function renderOccRegFormulario(editing) {
   <div class="fRow">
     <div class="fGroup"><label>Aptitud laboral</label><select id="occAptitud"><option ${aptSelected('Apto')}>Apto</option><option ${aptSelected('Apto con restricción')}>Apto con restricción</option><option ${aptSelected('No apto con restricción')}>No apto con restricción</option><option ${aptSelected('No apto')}>No apto</option></select></div>
   </div>
-  ${renderOccDictamenYConsentimiento(editing, { plano:true })}`)}
+  ${renderOccDictamenYConsentimiento(editing, { plano:true, parte:'dictamen' })}`)}
+  ${paso(8, renderOccDictamenYConsentimiento(editing, { plano:true, parte:'consentimiento' }))}
   <div class="occRegGuardarBar">
     <span class="attachHint">Puede guardar en cualquier momento; lo que falte se completa después con «Editar».</span>
     <button class="btn btn-primary" onclick="guardarOcupacionalRegistro()">💾 ${isEdit ? 'Actualizar evaluación' : 'Guardar evaluación'}</button>
@@ -1206,7 +1210,7 @@ ${mostrarLista ? renderOccRegLista(records, allRecords, nombreFilter) : ''}`);
     updateOccImc();
     updateRuffierMode();
     updateDopingOptions();
-    if (occRegPaso === 7) { occRegFirmaLista = true; initOccFirmaPad(); }
+    if (occRegPaso === 8) { occRegFirmaLista = true; initOccFirmaPad(); }
     occRegActualizarPasos();
     const form = document.getElementById('occRegForm');
     form?.addEventListener('input', occRegActualizarPasos);
