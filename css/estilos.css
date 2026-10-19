@@ -904,3 +904,73 @@ tr:hover td{
   .occRegBorrar{margin-left:0}
 }
 .occAvisoPrellenado{margin-bottom:.6rem;padding:.55rem .75rem;border-radius:8px;background:var(--blue-light);color:var(--blue);font-size:13px}
+/* Listas desplegables y cuadros grandes (Clínica propia; mismo estilo que Registros EMOP) */
+.tilesGrandes{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.85rem;margin-bottom:1rem}
+.tilesGrandes.tres{grid-template-columns:repeat(3,minmax(0,1fr))}
+.tileGrande{display:flex;align-items:center;gap:.8rem;text-align:left;padding:1rem 1.1rem;border:1.5px solid var(--border);border-radius:12px;background:#fff;cursor:pointer;font-family:inherit;color:var(--ink);box-shadow:var(--shadow);transition:border-color .15s,background .15s;min-height:76px;min-width:0}
+.tileGrande:hover{border-color:var(--green-mid);background:#f7fbf9}
+.tileGrande.activo{border:2px solid var(--green);background:var(--green-light)}
+.tileGrandeIcono{font-size:28px;line-height:1;flex:0 0 auto}
+.tileGrande strong{display:block;font-size:15.5px;color:var(--green-dark)}
+.tileGrandeSub{display:block;font-size:12.5px;color:var(--muted);margin-top:.1rem}
+.statGrid.cuatro{grid-template-columns:repeat(4,minmax(0,1fr))}
+button.statBox{font-family:inherit;cursor:pointer;width:100%;transition:border-color .15s}
+button.statBox:hover{border-color:var(--green-mid)}
+.listaPlana{border:1.5px solid var(--border);border-radius:10px;overflow:hidden;background:#fff}
+.listaPlana:has(> .listaVacia:only-child){border:0}
+.grupoLista{border:1.5px solid var(--border);border-radius:10px;margin-bottom:.6rem;background:#fff;overflow:hidden}
+.grupoLista>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;padding:.85rem 1rem;background:#f7faf8;user-select:none}
+.grupoLista>summary::-webkit-details-marker{display:none}
+.grupoLista>summary::before{content:'▸';color:var(--green);transition:transform .15s;display:inline-block;margin-right:-.2rem}
+.grupoLista[open]>summary::before{transform:rotate(90deg)}
+.grupoLista[open]>summary{border-bottom:1px solid var(--border)}
+.grupoListaTitulo{flex:1;font-weight:700;color:var(--green-dark);font-size:15px}
+.grupoListaResumen{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
+.grupoListaTotal{font-size:13px;color:var(--muted)}
+.filaLista{border-top:1px solid var(--border)}
+.filaLista:first-child{border-top:0}
+.filaLista>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.7rem 1rem;min-height:56px}
+.filaLista>summary::-webkit-details-marker{display:none}
+.filaLista>summary:hover{background:#f7fbf9}
+.filaLista[open]>summary{background:#f3f8f5}
+.filaListaIzq{display:flex;align-items:center;gap:.7rem;min-width:0;flex:1}
+.filaListaDer{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;justify-content:flex-end;flex:0 1 auto;min-width:0}
+.filaListaDer .badge{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filaTexto{min-width:0}
+.filaTexto strong{display:block;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filaSub{display:block;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filaAvatar{flex:0 0 auto;width:36px;height:36px;border-radius:50%;background:var(--green-light);color:var(--green);font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.filaHora{flex:0 0 auto;min-width:58px;text-align:center;background:var(--green-light);color:var(--green);border-radius:8px;padding:.35rem .5rem;font-size:13px;font-weight:700}
+.filaMarca{font-size:12.5px;color:var(--muted)}
+.filaListaDetalle{padding:.3rem 1rem .9rem;background:#fbfdfc}
+.filaDatos{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.5rem .9rem;font-size:13.5px;margin-bottom:.7rem}
+.filaDatos span,.filaNota span{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.filaNota{font-size:13.5px;margin-bottom:.7rem;white-space:pre-wrap}
+.filaAcciones{display:flex;gap:.45rem;flex-wrap:wrap}
+.filaBorrar{margin-left:auto;color:var(--red)}
+.listaVacia{text-align:center;color:#888;padding:1.25rem}
+
+/* Tablet: menú de íconos para dar espacio al contenido */
+@media(max-width:1024px){
+  .sidebar{width:64px;padding:.6rem .4rem}
+  .sidebar .navLabel{display:none}
+  .sidebar .navBtn{justify-content:center;padding:.7rem}
+  .sidebar .navIcon{font-size:18px;width:auto}
+}
+@media(max-width:760px){
+  .tilesGrandes.tres{grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem}
+  .tilesGrandes.tres .tileGrande{flex-direction:column;text-align:center;justify-content:center;padding:.7rem .35rem;min-height:0;gap:.3rem}
+  .tilesGrandes.tres .tileGrande strong{font-size:12.5px;line-height:1.2}
+  .tilesGrandes.tres .tileGrandeSub{display:none}
+  .tilesGrandes.tres .tileGrandeIcono{font-size:22px}
+  .statGrid.cuatro{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .filaDatos{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .filaListaDer .badge{max-width:110px}
+  .filaTexto strong,.filaSub{white-space:normal}
+  .filaLista>summary{padding:.65rem .75rem}
+  .filaBorrar{margin-left:0}
+}
+@media(min-width:761px) and (max-width:1024px){
+  .tileGrande{padding:.85rem .9rem;gap:.6rem}
+  .tileGrandeIcono{font-size:24px}
+}

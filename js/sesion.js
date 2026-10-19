@@ -41,6 +41,7 @@ function renderModuleSwitch() {
 function renderSidebar() {
   const sidebar = document.querySelector('.sidebar');
   if (!sidebar) return;
+  setTimeout(ponerNombresMenu, 0);
   if (currentModule === 'ocupacional') {
     sidebar.innerHTML = `
       <button class="navBtn" onclick="goTo('occEmpresas')" id="nav-occEmpresas"><span class="navIcon">🏢</span><span class="navLabel">Empresas</span></button>
@@ -66,6 +67,14 @@ function renderSidebar() {
       <button class="navBtn" onclick="switchModule('ocupacional')"><span class="navIcon">🏭</span><span class="navLabel">Salud Ocupacional</span></button>
       <button class="navBtn" onclick="doLogout()"><span class="navIcon">🚪</span><span class="navLabel">Cerrar sesión</span></button>
     </div>`;
+}
+
+// En tablet el menú muestra solo íconos: el nombre aparece al dejar el dedo o el mouse encima.
+function ponerNombresMenu() {
+  document.querySelectorAll('.sidebar .navBtn').forEach(btn => {
+    const nombre = btn.querySelector('.navLabel')?.textContent.trim();
+    if (nombre) { btn.title = nombre; btn.setAttribute('aria-label', nombre); }
+  });
 }
 
 function switchModule(module, page) {
