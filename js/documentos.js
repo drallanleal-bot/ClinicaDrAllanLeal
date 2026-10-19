@@ -31,7 +31,7 @@ function occDictamenDeAptitud(aptitud) {
 }
 
 // ── Formulario ────────────────────────────────────
-function renderOccCondicionesLaborales(editing) {
+function renderOccCondicionesLaborales(editing, opciones = {}) {
   const valores = editing?.condicionesLaborales || {};
   const head = OCC_CONDICIONES_FRECUENCIAS.map(f => `<th>${escapeHtml(f.label.split(' (')[0])}</th>`).join('');
   const body = OCC_CONDICIONES_LABORALES.map((g, gi) => `
@@ -40,10 +40,12 @@ function renderOccCondicionesLaborales(editing) {
       const key = occCondicionKey(gi, fi);
       return `<tr><td>${escapeHtml(fila)}</td>${OCC_CONDICIONES_FRECUENCIAS.map(f => `<td class="condCelda"><input type="radio" name="occCond_${key}" value="${f.key}" aria-label="${escapeHtml(fila)}: ${escapeHtml(f.label)}" ${valores[key] === f.key ? 'checked' : ''}></td>`).join('')}</tr>`;
     }).join('')}`).join('');
+  const contenido = `<div class="attachHint" style="margin-bottom:.5rem">Marque la frecuencia de exposición según el puesto. Ocasional: menos de 30 h/mes · Frecuente: 30 a 140 h/mes · Permanente: más de 140 h/mes.</div>
+    <div class="condWrap"><table class="condTabla"><thead><tr><th>Tipo de condiciones</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  if (opciones.plano) return contenido;
   return `<details class="fSection" ${Object.keys(valores).length ? 'open' : ''}>
     <summary>Condiciones laborales</summary>
-    <div class="attachHint" style="margin-bottom:.5rem">Marque la frecuencia de exposición según el puesto. Ocasional: menos de 30 h/mes · Frecuente: 30 a 140 h/mes · Permanente: más de 140 h/mes.</div>
-    <div class="condWrap"><table class="condTabla"><thead><tr><th>Tipo de condiciones</th>${head}</tr></thead><tbody>${body}</tbody></table></div>
+    ${contenido}
   </details>`;
 }
 
@@ -57,15 +59,15 @@ function leerOccCondicionesLaborales() {
   return valores;
 }
 
-function renderOccDictamenYConsentimiento(editing) {
+function renderOccDictamenYConsentimiento(editing, opciones = {}) {
   const firma = editing?.consentimientoFirma || '';
   return `
   <div class="fRow">
     <div class="fGroup"><label>Detalle de la restricción (si aplica)</label><input id="occRestriccionDetalle" value="${escapeHtml(editing?.restriccionDetalle || '')}" placeholder="Ej: no levantar más de 10 kg"></div>
     <div class="fGroup"><label>Recomendaciones</label><textarea id="occRecomendaciones" rows="2">${escapeHtml(editing?.recomendaciones || '')}</textarea></div>
   </div>
-  <details class="fSection" ${firma ? '' : 'open'}>
-    <summary>Consentimiento informado</summary>
+  ${opciones.plano ? '<div class="occSubtitulo">Consentimiento informado</div><div>' : `<details class="fSection" ${firma ? '' : 'open'}>
+    <summary>Consentimiento informado</summary>`}
     <div class="consTexto">${OCC_CONSENTIMIENTO_PARRAFOS.map(p => `<p>${escapeHtml(p)}</p>`).join('')}
       <p>Por lo que, yo, <strong id="occConsNombre">${escapeHtml(editing?.nombre || '(nombre del trabajador)')}</strong>, informo haber dado lectura a este documento, haber comprendido la información acá expuesta y comprendo que de surgir la necesidad de un posible acompañamiento médico laboral, debo cumplir con dicho plan terapéutico, por lo que confirmo mi participación en este Procedimiento de Evaluaciones Médicas Ocupacionales Anuales.</p>
     </div>
@@ -78,7 +80,7 @@ function renderOccDictamenYConsentimiento(editing) {
       <span class="attachHint" id="occFirmaEstado">${firma ? `Firmado el ${escapeHtml(fmtFechaHora(editing.consentimientoFirmadoEn))}` : 'Firme con el dedo, el lápiz de la tablet o el mouse.'}</span>
       <button type="button" class="btn btn-sm btn-outline" onclick="limpiarOccFirmaPad()">${firma ? 'Volver a firmar' : 'Borrar firma'}</button>
     </div>
-  </details>`;
+  ${opciones.plano ? '</div>' : '</details>'}`;
 }
 
 function fmtFechaHora(iso) {
