@@ -974,3 +974,33 @@ button.statBox:hover{border-color:var(--green-mid)}
   .tileGrande{padding:.85rem .9rem;gap:.6rem}
   .tileGrandeIcono{font-size:24px}
 }
+/* Salud Ocupacional ordenada: menú "Más", paneles compactos y reportes por cuadros */
+.occHeaderAcciones{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.menuMas{position:relative}
+.menuMas>summary{list-style:none;cursor:pointer}
+.menuMas>summary::-webkit-details-marker{display:none}
+.menuMasLista{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:220px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 30px rgba(16,31,47,.16);padding:.35rem;display:flex;flex-direction:column}
+.menuMasLista button{text-align:left;padding:.65rem .75rem;border:0;background:none;border-radius:8px;font:inherit;font-size:14px;cursor:pointer;color:var(--ink)}
+.menuMasLista button:hover{background:#f3f8f5}
+.panelCompacto{background:#fff;border:1.5px solid var(--border);border-radius:10px;margin-bottom:.6rem}
+.panelCompacto>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.75rem 1rem;font-size:14px;color:var(--ink)}
+.panelCompacto>summary::-webkit-details-marker{display:none}
+.panelCompactoAccion{font-size:13px;color:var(--blue);font-weight:600;white-space:nowrap}
+.panelCompacto[open]>summary{border-bottom:1px solid var(--border)}
+.panelCompacto[open] .panelCompactoAccion{visibility:hidden}
+.panelCompactoCuerpo{padding:.85rem 1rem 1rem}
+.riskGrid.compacto{grid-template-columns:repeat(5,minmax(0,1fr));gap:.55rem;margin-bottom:1rem}
+.riskGrid.compacto .riskBox{padding:.6rem .7rem}
+.riskGrid.compacto .riskBox>span:first-child{font-size:12px;color:var(--muted)}
+.riskGrid.compacto .riskBox strong{font-size:19px}
+.riskNota{display:block;font-size:11px;color:var(--muted)}
+.occReportes{margin-bottom:1rem}
+.occReportes .occPasoTile{min-height:60px}
+.filaSimple{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.65rem 1rem;border-top:1px solid var(--border)}
+.filaSimple:first-child{border-top:0}
+.occ-tropigas .occTitle{color:#9a3412}
+@media(max-width:760px){
+  .riskGrid.compacto{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .occHeaderAcciones{width:100%}
+  .filaSimple{flex-wrap:wrap;padding:.6rem .75rem}
+}
