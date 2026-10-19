@@ -597,17 +597,27 @@ function ageGroup(edad) {
 function isPilot(row) {
   return /piloto|conductor|driver|chofer/i.test(`${row.puesto || ''} ${row.area || ''}`);
 }
+// ── Encabezado de Salud Ocupacional: un botón principal y el resto en "⚙️ Más" ──
 function occHeader(title, subtitle) {
-  const company = activeOccCompany();
+  const mostrarRegistro = !isOcupViewer() && currentPage !== 'occRegistros';
   return `<div class="occHeader">
     <div><div class="occTitle">${title}</div><div class="occSubtitle">${subtitle}</div></div>
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-      <button class="btn btn-outline" onclick="openOccupationalScansFolder()">Abrir OneDrive</button>
-      ${isOcupViewer() ? '' : `<button class="btn btn-primary" onclick="forceOccupationalCloudSync()">Subir data a Firebase</button>`}
-      ${isOcupViewer() ? '' : `<button class="btn btn-primary" onclick="occRegAbrir('nueva')">+ Registro EMOP</button>`}
+    <div class="occHeaderAcciones">
+      ${mostrarRegistro ? `<button class="btn btn-primary" onclick="occRegAbrir('nueva')">+ Registro EMOP</button>` : ''}
+      <details class="menuMas">
+        <summary class="btn btn-outline">⚙️ Más</summary>
+        <div class="menuMasLista">
+          <button type="button" onclick="this.closest('details').open=false;openOccupationalScansFolder()">📂 Abrir OneDrive</button>
+          ${isOcupViewer() ? '' : `<button type="button" onclick="this.closest('details').open=false;forceOccupationalCloudSync()">☁️ Subir data a Firebase</button>`}
+        </div>
+      </details>
     </div>
   </div>`;
 }
+// Cierra el menú "⚙️ Más" al tocar fuera de él.
+document.addEventListener('click', e => {
+  document.querySelectorAll('details.menuMas[open]').forEach(d => { if (!d.contains(e.target)) d.open = false; });
+});
 function occRecordYear(record = {}) {
   return String(record.backupYear || record.fechaEvaluacion || record.fecha || '').slice(0, 4);
 }
@@ -760,11 +770,29 @@ ${isOcupViewer() ? '' : `<div class="card">
   <button class="btn btn-primary" onclick="crearEmpresaOcupacional()">Crear empresa</button>
 </div>`}`);
 }
+// ── Dashboard ocupacional: filtros compactos y un reporte abierto a la vez ──
+let occDashReporte = 'planta';
+function occDashVerReporte(id) { occDashReporte = id; renderOcupDashboard(); }
+function occDashLimpiarFiltros() {
+  ['occDashDateStart','occDashDateEnd'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const planta = document.getElementById('occDashPlant'); if (planta) planta.value = 'TODAS';
+  const anio = document.getElementById('occDashYear'); if (anio) anio.value = 'TODOS';
+  renderOcupDashboard();
+}
+function occListaTrabajadores(lista, extra = () => '') {
+  if (!lista.length) return '';
+  return `<div class="listaPlana">${lista.map(r => `<div class="filaSimple">
+    <span class="filaTexto"><strong>${escapeHtml(r.nombre || '(sin nombre)')}</strong><span class="filaSub">${escapeHtml(r.planta || '')} · ${fmtF(r.fechaEvaluacion)} · ${escapeHtml(r.puesto || 'Sin puesto')} · ${escapeHtml(r.expediente || '—')}</span>${extra(r)}</span>
+    <span class="badge ${occAptClass(r.aptitudLaboral)}">${escapeHtml(r.aptitudLaboral || '—')}</span>
+  </div>`).join('')}</div>`;
+}
 function renderOcupDashboard() {
   const plantFilter = document.getElementById('occDashPlant')?.value || 'TODAS';
   const yearFilter = document.getElementById('occDashYear')?.value || 'TODOS';
   const dateStartFilter = document.getElementById('occDashDateStart')?.value || '';
   const dateEndFilter = document.getElementById('occDashDateEnd')?.value || '';
+  const filtrosAbiertos = !!document.getElementById('occDashFiltros')?.open;
+  const syncAbierto = !!document.getElementById('occDashSync')?.open;
   const records = occFilteredRecords(plantFilter, '', yearFilter, { fechaInicio:dateStartFilter, fechaFin:dateEndFilter });
   const counts = occAptCounts(records);
   const scans = occData().scans.filter(s =>
@@ -780,93 +808,97 @@ function renderOcupDashboard() {
   const edadCounts = countBy(records, r => ageGroup(r.edad));
   const puestoCounts = countBy(records, r => r.puesto);
   const noAptos = records.filter(r => ['No apto','No apto con restricción'].includes(r.aptitudLaboral));
+  const conRestriccion = records.filter(r => r.aptitudLaboral === 'Apto con restricción');
   const dopingPositivos = records.filter(r => r.dopingResultado === 'Positivo');
   const dopingSustanciaCounts = countBy(dopingPositivos.flatMap(r => (Array.isArray(r.dopingSustancias) && r.dopingSustancias.length ? r.dopingSustancias : ['Positivo sin sustancia registrada'])), s => s);
+  const archivos = activeOccCompany().fileIndex || [];
   const plantRows = occData().plantas.map(p => {
     const rows = occFilteredRecords(p, '', yearFilter, { fechaInicio:dateStartFilter, fechaFin:dateEndFilter });
     const c = occAptCounts(rows);
-    return `<tr><td><strong>${p}</strong></td><td>${rows.length}</td><td>${c['Apto']}</td><td>${c['Apto con restricción']}</td><td>${c['No apto con restricción']}</td><td>${c['No apto']}</td></tr>`;
+    return `<tr><td><strong>${escapeHtml(p)}</strong></td><td>${rows.length}</td><td>${c['Apto']}</td><td>${c['Apto con restricción']}</td><td>${c['No apto con restricción']}</td><td>${c['No apto']}</td></tr>`;
   }).join('');
+  const resumenFiltro = [
+    plantFilter === 'TODAS' ? 'Todas las plantas' : plantFilter,
+    yearFilter === 'TODOS' ? 'Todos los años' : yearFilter,
+    (dateStartFilter || dateEndFilter) ? `${dateStartFilter ? fmtF(dateStartFilter) : '…'} a ${dateEndFilter ? fmtF(dateEndFilter) : '…'}` : ''
+  ].filter(Boolean).join(' · ');
+  const hayFiltros = plantFilter !== 'TODAS' || yearFilter !== 'TODOS' || dateStartFilter || dateEndFilter;
+  const reportes = [
+    { id:'planta', icono:'🏭', titulo:'Aptitud por planta', sub:`${occData().plantas.length} plantas` },
+    { id:'noaptos', icono:'⚠️', titulo:'No aptos y restricciones', sub:`${noAptos.length} no aptos · ${conRestriccion.length} restricción` },
+    { id:'doping', icono:'🧪', titulo:'Doping', sub:`${dopingPositivos.length} positivos` },
+    { id:'poblacion', icono:'👥', titulo:'Población', sub:'Puestos, edad, IMC, pilotos' },
+    { id:'ultimas', icono:'🕒', titulo:'Últimas evaluaciones', sub:'Las 10 más recientes' },
+    { id:'escaneres', icono:'📁', titulo:'Escáneres', sub:`${scans.length} archivos` },
+    { id:'archivos', icono:'🗂️', titulo:'Archivos OneDrive', sub:`${archivos.length} indexados` }
+  ];
+  const vacio = texto => `<div class="listaVacia">${escapeHtml(texto)}</div>`;
+  const contenidoReporte = {
+    planta: `<table><thead><tr><th>Planta</th><th>Total</th><th>Apto</th><th>Apto c/restr.</th><th>No apto c/restr.</th><th>No apto</th></tr></thead><tbody>${plantRows}</tbody></table>`,
+    noaptos: `<div class="occSubtitulo">No aptos (${noAptos.length})</div>${occListaTrabajadores(noAptos) || vacio('Sin no aptos en estos filtros.')}
+      <div class="occSubtitulo" style="margin-top:1rem">Aptos con restricción (${conRestriccion.length})</div>${occListaTrabajadores(conRestriccion, r => r.restriccionDetalle ? `<span class="filaSub">Restricción: ${escapeHtml(r.restriccionDetalle)}</span>` : '') || vacio('Sin restricciones en estos filtros.')}`,
+    doping: `<div class="fRow" style="align-items:flex-start">
+      <div>${tableFromCounts(dopingSustanciaCounts, 'Sustancia')}</div>
+      <div>${dopingPositivos.length ? `<div class="listaPlana">${dopingPositivos.map(r => `<div class="filaSimple"><span class="filaTexto"><strong>${escapeHtml(r.nombre)}</strong><span class="filaSub">${escapeHtml(r.planta)} · ${fmtF(r.fechaEvaluacion)} · ${escapeHtml((r.dopingSustancias || []).join(', ') || 'Sin sustancia registrada')}</span></span>${dopingPhotoPreview(r.dopingFotos)}</div>`).join('')}</div>` : vacio('Sin resultados positivos de doping en estos filtros.')}</div>
+    </div>`,
+    poblacion: `<div class="fRow"><div>${tableFromCounts(puestoCounts, 'Puesto')}</div><div>${tableFromCounts(edadCounts, 'Edad')}</div></div>
+      <div class="fRow" style="margin-top:.75rem"><div>${tableFromCounts(imcCounts, 'Clasificación IMC')}</div><div>${tableFromCounts(countBy(pilotos, r => r.planta), 'Pilotos por planta')}</div></div>`,
+    ultimas: occListaTrabajadores(records.slice().sort((a, b) => String(b.fechaEvaluacion || '').localeCompare(String(a.fechaEvaluacion || ''))).slice(0, 10)) || vacio('Sin evaluaciones con estos filtros.'),
+    escaneres: `${scans.length ? `<div class="listaPlana">${scans.slice().reverse().map(s => `<div class="filaSimple"><span class="filaTexto"><strong>${escapeHtml(s.nombreArchivo)}</strong><span class="filaSub">${escapeHtml(s.planta)} · ${fmtF(s.fecha)} · ${escapeHtml(s.tipo)}</span></span><span class="filaListaDer">${scanStorageBadge(s)}${scanDownloadButton(s)}</span></div>`).join('')}</div>` : vacio('Sin escáneres registrados en estos filtros.')}
+      <div style="margin-top:.75rem"><button class="btn btn-sm btn-outline" onclick="goTo('occEscaneres')">Ir a Escáneres →</button></div>`,
+    archivos: `<p style="font-size:13px;color:#666;margin:0 0 .75rem">El sistema guarda solo el índice; los documentos reales permanecen en su OneDrive.</p>
+      ${archivos.length ? `<div class="listaPlana">${archivos.slice(0, 25).map(f => `<div class="filaSimple"><span class="filaTexto"><strong>${escapeHtml(f.nombreArchivo)}</strong><span class="filaSub">${escapeHtml(f.ruta)}</span></span><span class="filaMarca">${escapeHtml(f.tamano || '')}</span></div>`).join('')}</div>` : vacio('Aún no se ha indexado una carpeta.')}
+      ${archivos.length > 25 ? `<div class="attachHint" style="margin-top:.5rem">Se muestran 25 de ${archivos.length}.</div>` : ''}`
+  };
+  if (!contenidoReporte[occDashReporte]) occDashReporte = 'planta';
+  const actual = reportes.find(r => r.id === occDashReporte);
   setC(`
 ${occHeader(`Salud Ocupacional - ${occData().activeEmpresa}`, 'Control de jornadas EMOP por planta, fecha, aptitud laboral y escáneres.')}
-<div class="card">
-  <div class="cardTitle">Filtros</div>
-  <div class="fRow">
-    <div class="fGroup"><label>Planta</label><select id="occDashPlant" onchange="renderOcupDashboard()"><option value="TODAS">Todas las plantas</option>${occPlantsOptions(plantFilter)}</select></div>
-    <div class="fGroup"><label>Año</label><select id="occDashYear" onchange="renderOcupDashboard()"><option value="TODOS">Todos los años</option>${occYearOptions(yearFilter)}</select></div>
-    <div class="fGroup"><label>Fecha de inicio</label><input id="occDashDateStart" type="date" value="${dateStartFilter}" onchange="renderOcupDashboard()"></div>
-    <div class="fGroup"><label>Fecha final</label><input id="occDashDateEnd" type="date" value="${dateEndFilter}" onchange="renderOcupDashboard()"></div>
+<details class="panelCompacto" id="occDashFiltros" ${filtrosAbiertos ? 'open' : ''}>
+  <summary><span>🔎 <strong>Filtros:</strong> ${escapeHtml(resumenFiltro)}</span><span class="panelCompactoAccion">Cambiar</span></summary>
+  <div class="panelCompactoCuerpo">
+    <div class="fRow">
+      <div class="fGroup"><label>Planta</label><select id="occDashPlant" onchange="renderOcupDashboard()"><option value="TODAS">Todas las plantas</option>${occPlantsOptions(plantFilter)}</select></div>
+      <div class="fGroup"><label>Año</label><select id="occDashYear" onchange="renderOcupDashboard()"><option value="TODOS">Todos los años</option>${occYearOptions(yearFilter)}</select></div>
+      <div class="fGroup"><label>Fecha de inicio</label><input id="occDashDateStart" type="date" value="${dateStartFilter}" onchange="renderOcupDashboard()"></div>
+      <div class="fGroup"><label>Fecha final</label><input id="occDashDateEnd" type="date" value="${dateEndFilter}" onchange="renderOcupDashboard()"></div>
+    </div>
+    ${hayFiltros ? '<div style="display:flex;justify-content:flex-end;margin-top:.65rem"><button class="btn btn-sm btn-outline" onclick="occDashLimpiarFiltros()">Quitar filtros</button></div>' : ''}
   </div>
-  ${(dateStartFilter || dateEndFilter) ? `<div style="display:flex;justify-content:flex-end;margin-top:.65rem"><button class="btn btn-sm btn-outline" onclick="document.getElementById('occDashDateStart').value='';document.getElementById('occDashDateEnd').value='';renderOcupDashboard()">Limpiar fechas</button></div>` : ''}
-  ${isOcupViewer() ? '' : `<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
-    <button class="btn btn-outline" onclick="indexarCarpetaOcupacional()">Indexar carpeta local de OneDrive</button>
-    <button class="btn btn-primary" onclick="forceOccupationalCloudSync()">Sincronizar ahora con Firebase</button>
-    <button class="btn btn-outline" onclick="openOccupationalScansFolder()">Abrir carpeta de resultados</button>
-  </div>`}
-  ${renderOccCloudStatus()}
-</div>
-<div class="riskGrid" style="margin-bottom:1rem">
-  <div class="riskBox"><span>Por puestos de trabajo</span><strong>${Object.keys(puestoCounts).length}</strong><small>puestos identificados</small></div>
-  <div class="riskBox"><span>Pilotos / grupo prioritario</span><strong>${pilotos.length}/${records.length || 0}</strong><small>pilotos, conductores o choferes</small></div>
-  <div class="riskBox"><span>Hipertensión arterial</span><strong>${hta}/${records.length || 0}</strong><small>PA ≥ 140/90 registrada</small></div>
-  <div class="riskBox"><span>Hiperglucemia</span><strong>${glucosa}/${records.length || 0}</strong><small>GMT ≥ 126 mg/dL</small></div>
-  <div class="riskBox"><span>Doping positivo</span><strong>${dopingPositivos.length}/${records.length || 0}</strong><small>resultados positivos registrados</small></div>
-</div>
-<div class="statGrid">
+</details>
+<details class="panelCompacto" id="occDashSync" ${syncAbierto ? 'open' : ''}>
+  <summary><span>⚙️ <strong>Sincronización y OneDrive</strong></span><span class="panelCompactoAccion">Ver</span></summary>
+  <div class="panelCompactoCuerpo">
+    ${isOcupViewer() ? '' : `<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem">
+      <button class="btn btn-primary" onclick="forceOccupationalCloudSync()">Sincronizar ahora con Firebase</button>
+      <button class="btn btn-outline" onclick="indexarCarpetaOcupacional()">Indexar carpeta local de OneDrive</button>
+      <button class="btn btn-outline" onclick="openOccupationalScansFolder()">Abrir carpeta de resultados</button>
+    </div>`}
+    ${renderOccCloudStatus()}
+  </div>
+</details>
+<div class="statGrid cuatro">
   <div class="statBox"><div class="statNum">${records.length}</div><div class="statLbl">Evaluaciones</div></div>
   <div class="statBox"><div class="statNum">${counts['Apto']}</div><div class="statLbl">Aptos</div></div>
-  <div class="statBox"><div class="statNum">${counts['Apto con restricción']}</div><div class="statLbl">Aptos con restricción</div></div>
-  <div class="statBox"><div class="statNum">${counts['No apto con restricción'] + counts['No apto']}</div><div class="statLbl">No aptos / restricción</div></div>
+  <div class="statBox"><div class="statNum">${counts['Apto con restricción']}</div><div class="statLbl">Con restricción</div></div>
+  <div class="statBox"><div class="statNum">${counts['No apto con restricción'] + counts['No apto']}</div><div class="statLbl">No aptos</div></div>
+</div>
+<div class="riskGrid compacto">
+  <div class="riskBox"><span>Puestos</span><strong>${Object.keys(puestoCounts).length}</strong></div>
+  <div class="riskBox"><span>Pilotos</span><strong>${pilotos.length}/${records.length || 0}</strong></div>
+  <div class="riskBox"><span>Hipertensión</span><strong>${hta}/${records.length || 0}</strong><span class="riskNota">PA ≥ 140/90</span></div>
+  <div class="riskBox"><span>Hiperglucemia</span><strong>${glucosa}/${records.length || 0}</strong><span class="riskNota">GMT ≥ 126</span></div>
+  <div class="riskBox"><span>Doping +</span><strong>${dopingPositivos.length}/${records.length || 0}</strong></div>
+</div>
+<div class="occPasos occReportes">
+  ${reportes.map(r => `<button type="button" class="occPasoTile${r.id === occDashReporte ? ' activo' : ''}" onclick="occDashVerReporte('${r.id}')" aria-pressed="${r.id === occDashReporte}">
+    <span class="occPasoIcono" aria-hidden="true">${r.icono}</span>
+    <span class="occPasoTexto"><strong>${escapeHtml(r.titulo)}</strong><span class="occMini">${escapeHtml(r.sub)}</span></span>
+  </button>`).join('')}
 </div>
 <div class="card">
-  <div class="cardTitle">Gráficas / análisis de población</div>
-  <div class="fRow">
-    <div>${tableFromCounts(puestoCounts, 'Puesto')}</div>
-    <div>${tableFromCounts(edadCounts, 'Edad')}</div>
-  </div>
-  <div class="fRow" style="margin-top:.75rem">
-    <div>${tableFromCounts(imcCounts, 'Clasificación IMC')}</div>
-    <div>${tableFromCounts(countBy(pilotos, r => r.planta), 'Pilotos por planta')}</div>
-  </div>
-</div>
-<div class="card">
-  <div class="cardTitle">Resultados de doping</div>
-  <div class="fRow" style="align-items:flex-start">
-    <div>${tableFromCounts(dopingSustanciaCounts, 'Sustancia')}</div>
-    <div>
-      <table><thead><tr><th>Fecha</th><th>Planta</th><th>Expediente</th><th>Nombre</th><th>Sustancia</th><th>Foto</th></tr></thead>
-      <tbody>${dopingPositivos.map(r => `<tr><td>${fmtF(r.fechaEvaluacion)}</td><td>${escapeHtml(r.planta)}</td><td>${escapeHtml(r.expediente)}</td><td>${escapeHtml(r.nombre)}</td><td>${escapeHtml((r.dopingSustancias || []).join(', ') || 'Positivo sin sustancia registrada')}</td><td>${dopingPhotoPreview(r.dopingFotos)}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:1rem">Sin resultados positivos de doping en estos filtros.</td></tr>'}</tbody></table>
-    </div>
-  </div>
-</div>
-<div class="card">
-  <div class="cardTitle">Aptitud laboral por planta</div>
-  <table><thead><tr><th>Planta</th><th>Total</th><th>Apto</th><th>Apto c/restricción</th><th>No apto c/restricción</th><th>No apto</th></tr></thead><tbody>${plantRows}</tbody></table>
-</div>
-<div class="card">
-  <div class="cardTitle">No aptos y no aptos con restricción por planta</div>
-  <table><thead><tr><th>Planta</th><th>Expediente</th><th>Nombre</th><th>Puesto</th><th>Aptitud</th></tr></thead>
-  <tbody>${noAptos.map(r => `<tr><td>${r.planta}</td><td>${r.expediente}</td><td>${r.nombre}</td><td>${r.puesto||'—'}</td><td><span class="badge ${occAptClass(r.aptitudLaboral)}">${r.aptitudLaboral}</span></td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:1rem">Sin registros no aptos en estos filtros.</td></tr>'}</tbody></table>
-</div>
-<div class="card">
-  <div class="cardTitle">Últimas evaluaciones</div>
-  <table><thead><tr><th>Fecha</th><th>Planta</th><th>Expediente</th><th>Nombre</th><th>Puesto</th><th>IMC</th><th>Aptitud</th></tr></thead>
-  <tbody>${records.slice().reverse().slice(0,10).map(r => `<tr><td>${fmtF(r.fechaEvaluacion)}</td><td>${r.planta}</td><td>${r.expediente}</td><td>${r.nombre}</td><td>${r.puesto||'—'}</td><td>${r.imc||'—'}</td><td><span class="badge ${occAptClass(r.aptitudLaboral)}">${r.aptitudLaboral}</span></td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:#aaa;padding:1rem">Sin evaluaciones registradas con estos filtros.</td></tr>'}</tbody></table>
-</div>
-<div class="card">
-  <div class="cardTitle">Escáneres disponibles</div>
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
-    <p style="font-size:13px;color:#666;margin:0">${scans.length} archivo(s) indexados para los filtros seleccionados.</p>
-    <button class="btn btn-sm btn-outline" onclick="openOccupationalScansFolder()">Descargar escáneres</button>
-  </div>
-  <table><thead><tr><th>Fecha</th><th>Planta</th><th>Tipo</th><th>Archivo</th><th>Estado</th><th>Descargar</th></tr></thead>
-  <tbody>${scans.slice().reverse().map(s => `<tr><td>${fmtF(s.fecha)}</td><td>${s.planta}</td><td>${s.tipo}</td><td>${s.nombreArchivo}</td><td>${scanStorageBadge(s)}</td><td>${scanDownloadButton(s)}</td></tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:1rem">Sin escáneres registrados.</td></tr>'}</tbody></table>
-</div>
-<div class="card">
-  <div class="cardTitle">Historias clínicas y reportes indexados desde OneDrive</div>
-  <p style="font-size:13px;color:#666;margin-bottom:.75rem">${(activeOccCompany().fileIndex || []).length} archivo(s) indexados. El sistema guarda el índice local; los documentos reales permanecen en tu OneDrive.</p>
-  <table><thead><tr><th>Archivo</th><th>Ruta</th><th>Tamaño</th></tr></thead>
-  <tbody>${(activeOccCompany().fileIndex || []).slice(0,25).map(f => `<tr><td>${f.nombreArchivo}</td><td>${f.ruta}</td><td>${f.tamano}</td></tr>`).join('') || '<tr><td colspan="3" style="text-align:center;color:#aaa;padding:1rem">Aún no se ha indexado una carpeta.</td></tr>'}</tbody></table>
+  <div class="cardTitle">${actual.icono} ${escapeHtml(actual.titulo)}</div>
+  ${contenidoReporte[occDashReporte]}
 </div>`);
 }
 // ── Registros EMOP: cuadros de inicio, formulario por secciones y listado por jornada ──
@@ -1333,21 +1365,44 @@ async function borrarOcupacionalRegistro(id) {
   await saveOccupationalStateToCloud(true);
   renderOcupRegistros();
 }
+// ── Escáneres: cuadros Subir / Ver archivos y listado por jornada ──
+let occScanVista = 'ver';
+function occScanCambiarVista(vista) {
+  if (vista === 'subir' && editingOcupScanId) editingOcupScanId = null;
+  occScanVista = vista;
+  renderOcupEscaneres();
+}
 function renderOcupEscaneres() {
-  const plantFilter = document.getElementById('occScanPlantFilter')?.value || 'TODAS';
-  const dateFilter = document.getElementById('occScanDateFilter')?.value || '';
-  const scans = occData().scans.filter(s => (!plantFilter || plantFilter === 'TODAS' || s.planta === plantFilter) && (!dateFilter || s.fecha === dateFilter));
-  const editing = occData().scans.find(s => String(s.id) === String(editingOcupScanId));
+  const plantFilter = document.getElementById('occScanPlantFilter')?.value || occScanFiltros.planta;
+  const dateFilter = document.getElementById('occScanDateFilter')?.value ?? occScanFiltros.fecha;
+  occScanFiltros.planta = plantFilter; occScanFiltros.fecha = dateFilter;
+  const todos = occData().scans;
+  const scans = todos.filter(s => (!plantFilter || plantFilter === 'TODAS' || s.planta === plantFilter) && (!dateFilter || s.fecha === dateFilter));
+  const editing = todos.find(s => String(s.id) === String(editingOcupScanId));
   const isEdit = !!editing;
+  const vista = isOcupViewer() ? 'ver' : (isEdit ? 'subir' : occScanVista);
   const scanPlant = editing?.planta || 'MIXCO';
   const scanFecha = editing?.fecha || todayLocalISO();
   const scanTipo = editing?.tipo || 'Aptitud laboral firmada';
   const scanUrl = editing?.url || '';
   const scanDirectStatus = editing?.firestoreFile?.chunkCount ? `Descarga directa lista (${editing.firestoreFile.chunkCount} parte(s), ${formatFileSize(editing.firestoreFile.size)})` : (editing?.url ? 'Abre por enlace directo de OneDrive' : 'Sin descarga directa');
   const scanTipoSelected = value => scanTipo === value ? 'selected' : '';
-  setC(`
-${occHeader('Escáneres - Aptitudes y consentimientos', 'Índice de archivos firmados por planta y fecha.')}
-${isOcupViewer() ? '' : `<div class="card">
+  const grupos = new Map();
+  scans.slice().reverse().forEach(s => {
+    const key = `${s.fecha || ''}|${s.planta || ''}`;
+    if (!grupos.has(key)) grupos.set(key, { fecha:s.fecha || '', planta:s.planta || '', items:[] });
+    grupos.get(key).items.push(s);
+  });
+  const listaGrupos = Array.from(grupos.entries()).sort((a, b) => b[1].fecha.localeCompare(a[1].fecha) || a[1].planta.localeCompare(b[1].planta));
+  const filaScan = s => clinicaFila(`s-${s.id}`,
+    `<span class="filaTexto"><strong>${escapeHtml(s.nombreArchivo || '(sin nombre)')}</strong><span class="filaSub">${escapeHtml(s.tipo || '')} · ${escapeHtml(s.tamano || '—')}</span></span>`,
+    scanStorageBadge(s),
+    `<div class="filaAcciones">
+      ${scanDownloadButton(s)}
+      ${isOcupViewer() ? '' : `<button class="btn btn-sm btn-outline" onclick="editarOcupacionalScan('${s.id}')">Editar</button>
+      <button class="btn btn-sm btn-outline filaBorrar" onclick="borrarOcupacionalScan('${s.id}')">Borrar</button>`}
+    </div>`);
+  const formulario = `<div class="card">
   <div class="cardTitle">${isEdit ? 'Editar escáner' : 'Subir escáneres'}</div>
   <div class="fRow three">
     <div class="fGroup"><label>Planta</label><select id="occScanPlanta">${occPlantsOptions(scanPlant)}</select></div>
@@ -1355,11 +1410,13 @@ ${isOcupViewer() ? '' : `<div class="card">
     <div class="fGroup"><label>Tipo</label><select id="occScanTipo"><option ${scanTipoSelected('Aptitud laboral firmada')}>Aptitud laboral firmada</option><option ${scanTipoSelected('Consentimiento informado')}>Consentimiento informado</option><option ${scanTipoSelected('Paquete aptitud + consentimiento')}>Paquete aptitud + consentimiento</option><option ${scanTipoSelected('Otro')}>Otro</option></select></div>
   </div>
   ${isEdit ? `<div class="fGroup"><label>Nombre del archivo</label><input id="occScanNombreArchivo" value="${escapeHtml(editing.nombreArchivo || '')}"></div>` : '<div class="scanDrop"><input type="file" id="occScanFiles" multiple accept=".pdf,image/*,.jpg,.jpeg,.png"></div>'}
-  <div class="fGroup">
-    <label>Enlace directo de OneDrive</label>
-    <input id="occScanUrl" type="url" value="${escapeHtml(scanUrl)}" placeholder="Pegue aqui el enlace compartido del archivo">
-    <div class="attachHint">Opcional. Permite abrir o descargar este escaner directo desde dashboard, registros y el usuario del ingeniero. Si sube varios archivos, agregue este enlace editando cada archivo despues.</div>
-  </div>
+  <details class="fSection" style="margin-top:.75rem" ${scanUrl ? 'open' : ''}>
+    <summary>Enlace directo de OneDrive (opcional)</summary>
+    <div class="fGroup">
+      <input id="occScanUrl" type="url" value="${escapeHtml(scanUrl)}" placeholder="Pegue aqui el enlace compartido del archivo">
+      <div class="attachHint">Permite abrir o descargar este escáner directo desde dashboard, registros y el usuario del ingeniero. Si sube varios archivos, agregue este enlace editando cada archivo después.</div>
+    </div>
+  </details>
   ${isEdit ? `<div class="scanDrop">
     <input type="file" id="occScanDirectFile" accept=".pdf,image/*,.jpg,.jpeg,.png">
     <div class="attachHint">Estado: ${escapeHtml(scanDirectStatus)}. Para que descargue directo como doping, seleccione aqui el PDF o imagen original y luego pulse Actualizar escáner.</div>
@@ -1370,22 +1427,26 @@ ${isOcupViewer() ? '' : `<div class="card">
     <button class="btn btn-outline" onclick="connectOneDriveFolder()">Conectar carpeta local OneDrive</button>
   </div>
   <div id="occScanSaveStatus"></div>
-  <p style="font-size:12px;color:#888;margin-top:.75rem">${isEdit ? 'La edición actualiza el índice del sistema. El archivo físico en OneDrive permanece igual.' : `Si la carpeta local de OneDrive está conectada, los archivos se copian a SALUD OCUPACIONAL / ${occData().activeEmpresa} / PLANTA / FECHA.`}</p>
-</div>`}
-<div class="card">
-  <div class="cardTitle">Filtros</div>
-  <div class="fRow">
+  <p style="font-size:12px;color:#888;margin-top:.75rem">${isEdit ? 'La edición actualiza el índice del sistema. El archivo físico en OneDrive permanece igual.' : `Si la carpeta local de OneDrive está conectada, los archivos se copian a SALUD OCUPACIONAL / ${escapeHtml(occData().activeEmpresa)} / PLANTA / FECHA.`}</p>
+</div>`;
+  const listado = `<div class="card">
+  <div class="cardTitle">Archivos <span class="occMini">${scans.length}${scans.length !== todos.length ? ` de ${todos.length}` : ''}</span></div>
+  <div class="fRow" style="margin-bottom:.8rem">
     <div class="fGroup"><label>Planta</label><select id="occScanPlantFilter" onchange="renderOcupEscaneres()"><option value="TODAS">Todas</option>${occPlantsOptions(plantFilter)}</select></div>
     <div class="fGroup"><label>Fecha</label><input type="date" id="occScanDateFilter" value="${dateFilter}" onchange="renderOcupEscaneres()"></div>
   </div>
-</div>
-<div class="card">
-  <div class="cardTitle">Archivos indexados (${scans.length})</div>
-  <table><thead><tr>${isOcupViewer() ? '' : '<th>Acción</th>'}<th>Fecha</th><th>Planta</th><th>Tipo</th><th>Archivo</th><th>Tamaño</th><th>Estado</th><th>Descargar</th></tr></thead>
-  <tbody>${scans.slice().reverse().map(s => `<tr>${isOcupViewer() ? '' : `<td style="white-space:nowrap"><button class="btn btn-sm btn-primary" onclick="editarOcupacionalScan('${s.id}')">Editar</button> <button class="btn btn-sm btn-outline" onclick="borrarOcupacionalScan('${s.id}')">Borrar</button></td>`}<td>${fmtF(s.fecha)}</td><td>${s.planta}</td><td>${s.tipo}</td><td>${s.nombreArchivo}</td><td>${s.tamano || '—'}</td><td>${scanStorageBadge(s)}</td><td>${scanDownloadButton(s)}</td></tr>`).join('') || `<tr><td colspan="${isOcupViewer() ? '7' : '8'}" style="text-align:center;color:#aaa;padding:1rem">No hay escáneres con estos filtros.</td></tr>`}</tbody></table>
+  ${listaGrupos.map(([key, g], i) => clinicaGrupo(`sg-${key}`, `${escapeHtml(g.planta || 'Sin planta')} · ${fmtF(g.fecha)}`, `<span class="grupoListaTotal">${g.items.length} ${g.items.length === 1 ? 'archivo' : 'archivos'}</span>`, g.items.map(filaScan).join(''), i === 0 || !!dateFilter)).join('') || '<div class="listaVacia">No hay escáneres con estos filtros.</div>'}
   <div style="margin-top:.75rem"><button class="btn btn-outline" onclick="openOccupationalScansFolder()">Abrir carpeta OneDrive compartida</button></div>
-</div>`);
+</div>`;
+  setC(`
+${occHeader('Escáneres - Aptitudes y consentimientos', 'Índice de archivos firmados por planta y fecha.')}
+${isOcupViewer() ? '' : `<div class="tilesGrandes">
+  ${tileGrande('⬆️', isEdit ? 'Editando escáner' : 'Subir escáneres', 'PDF o imagen de la jornada', "occScanCambiarVista('subir')", vista === 'subir')}
+  ${tileGrande('📁', 'Ver archivos', `${todos.length} escáneres por jornada`, "editingOcupScanId=null;occScanCambiarVista('ver')", vista === 'ver')}
+</div>`}
+${vista === 'subir' ? formulario : listado}`);
 }
+const occScanFiltros = { planta:'TODAS', fecha:'' };
 async function guardarOcupacionalEscaneres() {
   const saveButton = document.getElementById('btnGuardarOcupScan');
   if (saveButton?.dataset.saving === '1') return;
@@ -1434,6 +1495,7 @@ async function guardarOcupacionalEscaneres() {
       await saveOccupationalStateToCloud(true);
       setOccScanSaveStatus('Escáner actualizado correctamente.', 100);
       showToast('Escáner actualizado.');
+      occScanVista = 'ver';
       renderOcupEscaneres();
       return;
     }
@@ -1478,6 +1540,7 @@ async function guardarOcupacionalEscaneres() {
     const multiLinkNotice = scanUrl && files.length > 1 ? ' El enlace directo no se asignó porque subió varios archivos; edite cada escáner para pegar su enlace individual.' : '';
     setOccScanSaveStatus('Escáneres guardados correctamente.', 100);
     showToast((oneDriveDirHandle ? `Escáneres guardados. ${synced}/${files.length} copiado(s) a la carpeta local de OneDrive.` : 'Escáneres indexados. Conecte carpeta local de OneDrive para copiar archivos automáticamente.') + ` Descarga directa lista: ${directReady}/${files.length}.` + multiLinkNotice);
+    occScanVista = 'ver';
     renderOcupEscaneres();
   } catch (e) {
     console.warn('No se pudo guardar el escáner.', e);
@@ -1536,14 +1599,15 @@ function renderOcupPlantas() {
   setC(`${occHeader(`Plantas ${occData().activeEmpresa}`, (occData().plantas || []).join(', '))}<div class="occPlantGrid">${rows}</div>`);
 }
 
+// ── Planes de SSO: cuadros Subir / Planes guardados ──
+let planesVista = 'lista';
+function planesCambiarVista(vista) { planesVista = vista; renderPlanesSSO(); }
 function renderPlanesSSO() {
   const planes = state.planesSSO || [];
-  setC(`
-${occHeader('Planes de SSO', 'Archivo y respaldo de planes de salud y seguridad ocupacional firmados.')}
-<div class="card">
+  const formulario = `<div class="card">
   <div class="cardTitle">Subir plan firmado</div>
   <div class="fRow">
-    <div class="fGroup"><label>Empresa</label><input id="planEmpresa" value="${occData().activeEmpresa || ''}"></div>
+    <div class="fGroup"><label>Empresa</label><input id="planEmpresa" value="${escapeHtml(occData().activeEmpresa || '')}"></div>
     <div class="fGroup"><label>Fecha</label><input id="planFecha" type="date" value="${todayLocalISO()}"></div>
   </div>
   <div class="scanDrop"><input type="file" id="planSSOFiles" multiple accept=".pdf,.doc,.docx,image/*,.jpg,.jpeg,.png"></div>
@@ -1551,15 +1615,23 @@ ${occHeader('Planes de SSO', 'Archivo y respaldo de planes de salud y seguridad 
     <button class="btn btn-primary" onclick="guardarPlanesSSO()">Guardar planes SSO</button>
     <button class="btn btn-outline" onclick="connectOneDriveFolder()">Conectar carpeta local OneDrive</button>
   </div>
-</div>
-<div class="card">
-  <div class="cardTitle">Planes respaldados (${planes.length})</div>
-  <table><thead><tr><th>Fecha</th><th>Empresa</th><th>Archivo</th><th>Tamaño</th><th>Estado</th></tr></thead>
-  <tbody>${planes.slice().reverse().map(p => `<tr><td>${fmtF(p.fecha)}</td><td>${p.empresa}</td><td>${p.nombreArchivo}</td><td>${p.tamano}</td><td><span class="badge ${p.sincronizado?'badge-green':'badge-warn'}">${p.sincronizado?'Guardado en OneDrive local':'Solo índice'}</span></td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#aaa;padding:1rem">Aún no hay planes de SSO registrados.</td></tr>'}</tbody></table>
+</div>`;
+  const listado = `<div class="card">
+  <div class="cardTitle">Planes respaldados <span class="occMini">${planes.length}</span></div>
+  ${planes.length ? `<div class="listaPlana">${planes.slice().reverse().map(p => `<div class="filaSimple">
+    <span class="filaTexto"><strong>${escapeHtml(p.nombreArchivo)}</strong><span class="filaSub">${escapeHtml(p.empresa)} · ${fmtF(p.fecha)} · ${escapeHtml(p.tamano || '')}</span></span>
+    <span class="badge ${p.sincronizado?'badge-green':'badge-warn'}">${p.sincronizado?'En OneDrive local':'Solo índice'}</span>
+  </div>`).join('')}</div>` : '<div class="listaVacia">Aún no hay planes de SSO registrados.</div>'}
   <div style="margin-top:.75rem"><button class="btn btn-outline" onclick="openOneDriveWebFolder()">Abrir respaldo OneDrive</button></div>
-</div>`);
+</div>`;
+  setC(`
+${occHeader('Planes de SSO', 'Archivo y respaldo de planes de salud y seguridad ocupacional firmados.')}
+<div class="tilesGrandes">
+  ${tileGrande('⬆️', 'Subir plan', 'Plan firmado', "planesCambiarVista('subir')", planesVista === 'subir')}
+  ${tileGrande('📄', 'Planes guardados', `${planes.length} ${planes.length === 1 ? 'plan' : 'planes'}`, "planesCambiarVista('lista')", planesVista === 'lista')}
+</div>
+${planesVista === 'subir' ? formulario : listado}`);
 }
-
 async function guardarPlanesSSO() {
   const files = Array.from(document.getElementById('planSSOFiles').files || []);
   if (!files.length) { alert('Seleccione uno o más planes firmados.'); return; }
@@ -1577,6 +1649,7 @@ async function guardarPlanesSSO() {
   normalizeStateCounters();
   await saveAppData({ backupToFolder:true });
   showToast(oneDriveDirHandle ? `Planes guardados. ${synced}/${files.length} copiado(s) a OneDrive local.` : 'Planes indexados. Conecte carpeta local de OneDrive para copiarlos automáticamente.');
+  planesVista = 'lista';
   renderPlanesSSO();
 }
 
