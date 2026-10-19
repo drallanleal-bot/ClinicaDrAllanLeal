@@ -41,56 +41,159 @@ function refreshClinicPage(fallback = 'dashboard') {
   else goTo(fallback);
 }
 
-// ── DASHBOARD ─────────────────────────────────────
+// ── Listas desplegables de Clínica propia (mismo estilo que Registros EMOP) ──
+// Guarda qué grupos y filas están abiertos para que no se cierren al actualizar desde Firebase.
+const clinicaAbiertos = new Set();
+const clinicaGruposAbiertos = {};
+let agendaVista = 'calendario';
+const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function clinicaToggleFila(el) {
+  if (el.open) clinicaAbiertos.add(el.dataset.k);
+  else clinicaAbiertos.delete(el.dataset.k);
+}
+function clinicaToggleGrupo(el) {
+  clinicaGruposAbiertos[el.dataset.k] = el.open;
+}
+function clinicaGrupoAbierto(key, porDefecto) {
+  return key in clinicaGruposAbiertos ? clinicaGruposAbiertos[key] : porDefecto;
+}
+function clinicaDato(label, valor) {
+  return `<div><span>${escapeHtml(label)}</span>${valor}</div>`;
+}
+function clinicaFila(key, resumenIzq, resumenDer, detalle) {
+  return `<details class="filaLista" data-k="${escapeHtml(key)}" ontoggle="clinicaToggleFila(this)" ${clinicaAbiertos.has(key) ? 'open' : ''}>
+    <summary><span class="filaListaIzq">${resumenIzq}</span><span class="filaListaDer">${resumenDer}</span></summary>
+    <div class="filaListaDetalle">${detalle}</div>
+  </details>`;
+}
+function clinicaGrupo(key, titulo, resumen, filas, abiertoPorDefecto) {
+  const abierto = clinicaGrupoAbierto(key, abiertoPorDefecto);
+  return `<details class="grupoLista" data-k="${escapeHtml(key)}" ontoggle="clinicaToggleGrupo(this)" ${abierto ? 'open' : ''}>
+    <summary><span class="grupoListaTitulo">${titulo}</span><span class="grupoListaResumen">${resumen}</span></summary>
+    <div>${filas}</div>
+  </details>`;
+}
+function tileGrande(icono, titulo, sub, onclick, activo = false) {
+  return `<button type="button" class="tileGrande${activo ? ' activo' : ''}" onclick="${onclick}">
+    <span class="tileGrandeIcono" aria-hidden="true">${icono}</span>
+    <span><strong>${titulo}</strong><span class="tileGrandeSub">${sub}</span></span>
+  </button>`;
+}
+function alergiaTexto(p) {
+  const a = String(p.alergias || '').trim();
+  return a && a.toLowerCase() !== 'ninguna' ? a : '';
+}
+function ultimaHistoriaDe(pacienteId) {
+  return state.historias.filter(h => String(h.pacienteId) === String(pacienteId)).sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')))[0];
+}
+
+// Filas reutilizables
+function filaPaciente(p) {
+  const alergia = alergiaTexto(p);
+  const ultima = ultimaHistoriaDe(p.id);
+  const nHist = state.historias.filter(h => String(h.pacienteId) === String(p.id)).length;
+  return clinicaFila(`p-${p.id}`,
+    `<span class="filaAvatar" aria-hidden="true">${escapeHtml(initials(p.nombre || '?'))}</span><span class="filaTexto"><strong>${escapeHtml(p.nombre)}</strong><span class="filaSub">${escapeHtml(patientCode(p))} · ${escapeHtml(calcEdad(p.nac))}</span></span>`,
+    alergia ? `<span class="badge badge-red" title="Alergias">⚠ ${escapeHtml(alergia)}</span>` : '',
+    `<div class="filaDatos">
+      ${clinicaDato('Documento', escapeHtml(p.doc || '—'))}
+      ${clinicaDato('Teléfono', escapeHtml(p.tel || '—'))}
+      ${clinicaDato('Sexo', escapeHtml(p.sexo || '—'))}
+      ${clinicaDato('Alergias', alergia ? `<span style="color:var(--red)">${escapeHtml(alergia)}</span>` : 'Ninguna')}
+      ${clinicaDato('Historias', String(nHist))}
+      ${clinicaDato('Última consulta', ultima ? fmtF(ultima.fecha) : '—')}
+    </div>
+    <div class="filaAcciones">
+      <button class="btn btn-sm btn-primary" onclick="verPaciente('${p.id}')">Abrir ficha</button>
+      <button class="btn btn-sm btn-outline" onclick="prepModalHistoria('${p.id}');openModal('modalHistoria')">+ Historia</button>
+      <button class="btn btn-sm btn-outline" onclick="prepModalCita('${p.id}');openModal('modalCita')">+ Cita</button>
+      <button class="btn btn-sm btn-outline" onclick="prepModalPaciente('${p.id}');openModal('modalPaciente')">Editar</button>
+      <button class="btn btn-sm btn-outline filaBorrar" onclick="borrarPaciente('${p.id}')">Borrar</button>
+    </div>`);
+}
+function filaHistoria(h, mostrarPaciente = true) {
+  const pac = getPac(h.pacienteId);
+  const nAdj = (h.adjuntos || []).length;
+  const titulo = mostrarPaciente ? pac.nombre : (h.motivo || 'Consulta');
+  const sub = mostrarPaciente ? `${fmtF(h.fecha)} · ${h.motivo || 'Sin motivo'}` : fmtF(h.fecha);
+  return clinicaFila(`h-${h.id}`,
+    `<span class="filaTexto"><strong>${escapeHtml(titulo)}</strong><span class="filaSub">${escapeHtml(sub)}</span></span>`,
+    `${nAdj ? `<span class="filaMarca" title="Adjuntos">📎 ${nAdj}</span>` : ''}${h.diagnostico ? `<span class="badge badge-blue">${escapeHtml(h.diagnostico)}</span>` : ''}`,
+    `<div class="filaDatos">
+      ${mostrarPaciente ? clinicaDato('Código', escapeHtml(patientCode(pac))) : ''}
+      ${clinicaDato('Fecha', fmtF(h.fecha))}
+      ${clinicaDato('Presión arterial', escapeHtml(h.ta || '—'))}
+      ${clinicaDato('Adjuntos', String(nAdj))}
+    </div>
+    ${h.tratamiento ? `<div class="filaNota"><span>Tratamiento</span>${escapeHtml(h.tratamiento)}</div>` : ''}
+    <div class="filaAcciones">
+      <button class="btn btn-sm btn-primary" onclick="verHistoria('${h.id}')">Ver completa</button>
+      <button class="btn btn-sm btn-outline" onclick="prepModalHistoria(null,'${h.id}');openModal('modalHistoria')">Editar</button>
+      ${mostrarPaciente ? `<button class="btn btn-sm btn-outline" onclick="verPaciente('${h.pacienteId}')">Ficha del paciente</button>` : ''}
+      <button class="btn btn-sm btn-outline filaBorrar" onclick="borrarHistoria('${h.id}')">Borrar</button>
+    </div>`);
+}
+function filaCita(c, mostrarPaciente = true) {
+  const pac = getPac(c.pacienteId);
+  const titulo = mostrarPaciente ? pac.nombre : (c.tipo || 'Cita');
+  const sub = mostrarPaciente ? `${fmtF(c.fecha)} · ${c.tipo || ''}` : fmtF(c.fecha);
+  return clinicaFila(`c-${c.id}`,
+    `<span class="filaHora">${escapeHtml(c.hora || '—')}</span><span class="filaTexto"><strong>${escapeHtml(titulo)}</strong><span class="filaSub">${escapeHtml(sub)}</span></span>`,
+    `<span class="badge ${citaBadgeClass(c.estado)}">${escapeHtml(c.estado || 'pendiente')}</span>`,
+    `<div class="filaDatos">
+      ${clinicaDato('Tipo', escapeHtml(c.tipo || '—'))}
+      ${clinicaDato('Recordatorio', escapeHtml(c.recordatorio || 'Calendario general'))}
+      ${mostrarPaciente ? clinicaDato('Teléfono', escapeHtml(pac.tel || '—')) : ''}
+    </div>
+    ${c.notas ? `<div class="filaNota"><span>Notas</span>${escapeHtml(c.notas)}</div>` : ''}
+    <div class="filaAcciones">
+      ${c.estado !== 'confirmada' ? `<button class="btn btn-sm btn-primary" onclick="confirmarCita('${c.id}')">Confirmar</button>` : ''}
+      ${c.estado !== 'cancelada' ? `<button class="btn btn-sm btn-outline" onclick="cancelarCita('${c.id}')">Cancelar cita</button>` : ''}
+      <button class="btn btn-sm btn-outline" onclick="prepModalCita(null,'${c.id}');openModal('modalCita')">Editar</button>
+      ${mostrarPaciente ? `<button class="btn btn-sm btn-outline" onclick="verPaciente('${c.pacienteId}')">Ficha del paciente</button>` : ''}
+      <button class="btn btn-sm btn-outline filaBorrar" onclick="borrarCita('${c.id}')">Borrar</button>
+    </div>`);
+}
+function listaVacia(texto) { return `<div class="listaVacia">${escapeHtml(texto)}</div>`; }
+function ordenarCitas(lista, desc = false) {
+  return lista.slice().sort((a, b) => {
+    const r = `${a.fecha || ''} ${a.hora || ''}`.localeCompare(`${b.fecha || ''} ${b.hora || ''}`);
+    return desc ? -r : r;
+  });
+}
+function historiasRecientes(lista) {
+  return lista.slice().sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')) || String(b.id).localeCompare(String(a.id), undefined, { numeric:true }));
+}
+
+// ── INICIO ────────────────────────────────────────
 function renderDashboard() {
   const hoy = todayLocalISO();
-  const citasHoy = state.citas.filter(c => c.fecha === hoy);
+  const citasHoy = ordenarCitas(state.citas.filter(c => c.fecha === hoy));
   const prox = state.citas.filter(c => c.fecha > hoy).length;
+  const saludo = new Date().getHours() < 12 ? 'Buenos días' : (new Date().getHours() < 19 ? 'Buenas tardes' : 'Buenas noches');
   setC(`
 <div class="section-title">Clínica Propia</div>
-<p style="color:#66756f;font-size:13px;margin-top:-.65rem;margin-bottom:1rem">Buenos días, ${currentUser.name}. Registro privado de pacientes, historias clínicas, agenda y seguimiento.</p>
-<div class="statGrid">
-  <div class="statBox"><div class="statNum">${state.pacientes.length}</div><div class="statLbl">Pacientes</div></div>
-  <div class="statBox"><div class="statNum">${citasHoy.length}</div><div class="statLbl">Citas hoy</div></div>
-  <div class="statBox"><div class="statNum">${state.historias.length}</div><div class="statLbl">Historias</div></div>
-  <div class="statBox"><div class="statNum">${prox}</div><div class="statLbl">Próximas citas</div></div>
+<p style="color:#66756f;font-size:13px;margin-top:-.65rem;margin-bottom:1rem">${saludo}, ${escapeHtml(currentUser?.name || '')}.</p>
+<div class="tilesGrandes tres">
+  ${tileGrande('👤', 'Nuevo paciente', 'Registrar datos', "prepModalPaciente();openModal('modalPaciente')")}
+  ${tileGrande('📝', 'Nueva historia', 'Consulta de hoy', "prepModalHistoria();openModal('modalHistoria')")}
+  ${tileGrande('📅', 'Nueva cita', 'Agendar', "prepModalCita();openModal('modalCita')")}
+</div>
+<div class="statGrid cuatro">
+  <button type="button" class="statBox" onclick="goTo('pacientes')"><div class="statNum">${state.pacientes.length}</div><div class="statLbl">Pacientes</div></button>
+  <button type="button" class="statBox" onclick="agendaVista='lista';goTo('agenda')"><div class="statNum">${citasHoy.length}</div><div class="statLbl">Citas hoy</div></button>
+  <button type="button" class="statBox" onclick="goTo('historias')"><div class="statNum">${state.historias.length}</div><div class="statLbl">Historias</div></button>
+  <button type="button" class="statBox" onclick="agendaVista='lista';goTo('agenda')"><div class="statNum">${prox}</div><div class="statLbl">Próximas citas</div></button>
 </div>
 <div class="card">
-  <div class="cardTitle">📅 Agenda de hoy <small>— ${new Date().toLocaleDateString('es-GT',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</small></div>
-  ${citasHoy.length===0 ? '<p style="color:#aaa;font-size:14px;padding:.5rem 0">No hay citas programadas para hoy.</p>' : ''}
-  ${citasHoy.map(c => {
-    const pac = getPac(c.pacienteId);
-    return `<div style="display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid rgba(0,0,0,.06)">
-      <div style="background:var(--green-light);color:var(--green);border-radius:8px;padding:.4rem .75rem;font-size:13px;font-weight:700;min-width:56px;text-align:center">${c.hora}</div>
-      <div style="flex:1">
-        <div style="font-weight:500;font-size:14px">${pac.nombre}</div>
-        <div style="font-size:12px;color:#999">${c.tipo}</div>
-      </div>
-      <span class="badge ${citaBadgeClass(c.estado)}">${c.estado}</span>
-    </div>`;
-  }).join('')}
+  <div class="cardTitle">📅 Agenda de hoy <span class="occMini">${new Date().toLocaleDateString('es-GT',{weekday:'long',day:'numeric',month:'long'})}</span></div>
+  <div class="listaPlana">${citasHoy.map(c => filaCita(c)).join('') || listaVacia('No hay citas programadas para hoy.')}</div>
 </div>
 <div class="card">
   <div class="cardTitle">📋 Últimas historias clínicas</div>
-  <table><thead><tr><th>Paciente</th><th>Fecha</th><th>Diagnóstico</th><th>Acción</th></tr></thead>
-  <tbody>${state.historias.slice().reverse().slice(0,5).map(h => `<tr>
-    <td>${getPac(h.pacienteId).nombre}</td>
-    <td>${fmtF(h.fecha)}</td>
-    <td><span class="badge badge-blue">${h.diagnostico}</span></td>
-    <td><div style="display:flex;gap:.35rem;flex-wrap:wrap">
-      <button class="btn btn-sm btn-outline" onclick="verHistoria('${h.id}')">Ver</button>
-      <button class="btn btn-sm btn-primary" onclick="prepModalHistoria(null,'${h.id}');openModal('modalHistoria')">Editar</button>
-      <button class="btn btn-sm btn-outline" onclick="borrarHistoria('${h.id}')">Borrar</button>
-    </div></td>
-  </tr>`).join('')}</tbody></table>
-</div>
-<div class="card" style="background:var(--green-light);border-color:#b2dfce">
-  <div class="cardTitle" style="color:var(--green)">⚡ Accesos rápidos</div>
-  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
-    <button class="btn btn-primary" onclick="prepModalPaciente();openModal('modalPaciente')">+ Nuevo paciente</button>
-    <button class="btn btn-primary" onclick="prepModalCita();openModal('modalCita')">+ Nueva cita</button>
-    <button class="btn btn-primary" onclick="prepModalHistoria();openModal('modalHistoria')">+ Nueva historia</button>
-  </div>
+  <div class="listaPlana">${historiasRecientes(state.historias).slice(0, 5).map(h => filaHistoria(h)).join('') || listaVacia('Aún no hay historias.')}</div>
+  ${state.historias.length > 5 ? `<div style="margin-top:.75rem"><button class="btn btn-sm btn-outline" onclick="goTo('historias')">Ver todas las historias →</button></div>` : ''}
 </div>`);
 }
 
@@ -101,35 +204,120 @@ function renderPacientes() {
   <input type="text" id="searchPac" placeholder="🔍  Buscar paciente por código, nombre o documento..." oninput="filtrarPacientes()"/>
   <button class="btn btn-primary" onclick="prepModalPaciente();openModal('modalPaciente')">+ Nuevo paciente</button>
 </div>
-<div class="card" style="padding:.5rem">
-  <table><thead><tr><th>Código</th><th>Paciente</th><th>Doc.</th><th>Edad</th><th>Teléfono</th><th>Alergias</th><th>Acciones</th></tr></thead>
-  <tbody id="tablaPacientes">${rowsPacientes(state.pacientes)}</tbody></table>
+<div class="card">
+  <div class="cardTitle">👥 Pacientes <span class="occMini" id="conteoPacientes"></span></div>
+  <div class="listaPlana" id="tablaPacientes">${rowsPacientes(state.pacientes)}</div>
 </div>`);
+  actualizarConteoPacientes(state.pacientes.length);
+}
+function actualizarConteoPacientes(n) {
+  const el = document.getElementById('conteoPacientes');
+  if (el) el.textContent = n === state.pacientes.length ? `${n}` : `${n} de ${state.pacientes.length}`;
 }
 function rowsPacientes(lista) {
-  if (!lista.length) return '<tr><td colspan="7" style="text-align:center;color:#aaa;padding:1.5rem">No se encontraron pacientes.</td></tr>';
-  return lista.map(p => `<tr>
-    <td><span class="badge badge-gray">${patientCode(p)}</span></td>
-    <td><div style="display:flex;align-items:center;gap:.6rem">
-      <div class="pacAvatar" style="width:32px;height:32px;font-size:12px">${initials(p.nombre)}</div>
-      <div><div style="font-weight:500">${p.nombre}</div><div style="font-size:11px;color:#aaa">${p.email||''}</div></div>
-    </div></td>
-    <td>${p.doc||'—'}</td>
-    <td>${calcEdad(p.nac)}</td>
-    <td>${p.tel||'—'}</td>
-    <td>${p.alergias && p.alergias!=='Ninguna' ? `<span class="badge badge-red">${p.alergias}</span>` : '<span class="badge badge-green">Ninguna</span>'}</td>
-    <td><div style="display:flex;gap:.35rem;flex-wrap:wrap">
-      <button class="btn btn-sm btn-outline" onclick="verPaciente('${p.id}')">Ver</button>
-      <button class="btn btn-sm btn-primary" onclick="prepModalPaciente('${p.id}');openModal('modalPaciente')">Editar</button>
-      <button class="btn btn-sm btn-outline" onclick="borrarPaciente('${p.id}')">Borrar</button>
-    </div></td>
-  </tr>`).join('');
+  if (!lista.length) return listaVacia('No se encontraron pacientes.');
+  return lista.slice().sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')).map(filaPaciente).join('');
 }
 function filtrarPacientes() {
-  const q = document.getElementById('searchPac').value.toLowerCase();
-  const res = state.pacientes.filter(p => patientCode(p).includes(q) || p.nombre.toLowerCase().includes(q) || (p.doc||'').includes(q));
+  const q = normalizeOccSearchText(document.getElementById('searchPac').value);
+  const res = state.pacientes.filter(p => patientCode(p).includes(q) || normalizeOccSearchText(p.nombre).includes(q) || String(p.doc || '').includes(q));
   document.getElementById('tablaPacientes').innerHTML = rowsPacientes(res);
+  actualizarConteoPacientes(res.length);
 }
+
+// ── HISTORIAS ─────────────────────────────────────
+function renderHistorias() {
+  setC(`
+<div class="searchRow">
+  <input type="text" id="searchHist" placeholder="🔍  Buscar por código, paciente o diagnóstico..." oninput="filtrarHistorias()"/>
+  <button class="btn btn-primary" onclick="prepModalHistoria();openModal('modalHistoria')">+ Nueva historia</button>
+</div>
+<div class="card">
+  <div class="cardTitle">📋 Historias clínicas <span class="occMini">${state.historias.length}</span></div>
+  <div id="tablaHistorias">${rowsHistorias(state.historias)}</div>
+</div>`);
+}
+function rowsHistorias(lista, buscando = false) {
+  if (!lista.length) return listaVacia('No se encontraron historias.');
+  const grupos = new Map();
+  historiasRecientes(lista).forEach(h => {
+    const key = String(h.fecha || '').slice(0, 7) || 'sin-fecha';
+    if (!grupos.has(key)) grupos.set(key, []);
+    grupos.get(key).push(h);
+  });
+  return Array.from(grupos.entries()).map(([key, hs], i) => {
+    const [y, m] = key.split('-');
+    const titulo = key === 'sin-fecha' ? 'Sin fecha' : `${MESES_ES[Number(m) - 1] || m} ${y}`;
+    const nAdj = hs.filter(h => (h.adjuntos || []).length).length;
+    const resumen = `${nAdj ? `<span class="filaMarca">📎 ${nAdj}</span>` : ''}<span class="grupoListaTotal">${hs.length} ${hs.length === 1 ? 'historia' : 'historias'}</span>`;
+    return clinicaGrupo(`hm-${key}`, escapeHtml(titulo), resumen, hs.map(h => filaHistoria(h)).join(''), buscando || i === 0);
+  }).join('');
+}
+function filtrarHistorias() {
+  const q = normalizeOccSearchText(document.getElementById('searchHist').value);
+  const res = state.historias.filter(h => {
+    const pac = getPac(h.pacienteId);
+    return patientCode(pac).includes(q) || normalizeOccSearchText(pac.nombre).includes(q) || normalizeOccSearchText(h.diagnostico).includes(q) || normalizeOccSearchText(h.motivo).includes(q);
+  });
+  document.getElementById('tablaHistorias').innerHTML = rowsHistorias(res, !!q);
+}
+
+// ── AGENDA ────────────────────────────────────────
+function agendaCambiarVista(vista) { agendaVista = vista; renderAgenda(); }
+function renderAgenda() {
+  const dias  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const hoyIso = todayLocalISO();
+  const hoy   = new Date();
+  const citasHoy = ordenarCitas(state.citas.filter(c => c.fecha === hoyIso));
+  const proximas = ordenarCitas(state.citas.filter(c => c.fecha > hoyIso));
+  const pasadas = ordenarCitas(state.citas.filter(c => !c.fecha || c.fecha < hoyIso), true);
+  let contenido = '';
+  if (agendaVista === 'calendario') {
+    const primerDia = new Date(calYear, calMonth, 1).getDay();
+    const ultDia    = new Date(calYear, calMonth+1, 0).getDate();
+    const prevUlt   = new Date(calYear, calMonth, 0).getDate();
+    let cells = '', d = 1, extra = 1;
+    for (let i = 0; i < 42; i++) {
+      let dayNum, isOther = false;
+      if (i < primerDia)      { dayNum = prevUlt - (primerDia - 1 - i); isOther = true; }
+      else if (d > ultDia)    { dayNum = extra++; isOther = true; d++; }
+      else                    { dayNum = d++; }
+      const isHoy = !isOther && dayNum===hoy.getDate() && calMonth===hoy.getMonth() && calYear===hoy.getFullYear();
+      const evs   = isOther ? [] : ordenarCitas(state.citas.filter(c => c.fecha === `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`));
+      cells += `<div class="calDay${isOther?' otherMonth':''}${isHoy?' today':''}" ${!isOther?`onclick="diaClick(${calYear},${calMonth+1},${dayNum})"`:''}>
+        <div class="dayNum">${dayNum}</div>
+        ${evs.slice(0,2).map(c => `<div class="ev${c.estado==='confirmada'?' conf':c.estado==='cancelada'?' cancelada':' reminder'}">${escapeHtml(c.hora)} ${escapeHtml(getPac(c.pacienteId).nombre.split(' ')[0])}</div>`).join('')}
+        ${evs.length>2 ? `<div style="font-size:9px;color:#888">+${evs.length-2}</div>` : ''}
+      </div>`;
+    }
+    contenido = `
+<div class="card" style="padding:.75rem">
+  <div class="calNav" style="margin:0 0 .75rem">
+    <button onclick="cambiarMes(-1)" aria-label="Mes anterior">‹</button>
+    <h4>${MESES_ES[calMonth]} ${calYear}</h4>
+    <button onclick="cambiarMes(1)" aria-label="Mes siguiente">›</button>
+  </div>
+  <div class="calGrid">${dias.map(d=>`<div class="calHead">${d}</div>`).join('')}${cells}</div>
+  <div class="attachHint" style="margin-top:.6rem">Toque un día para agendar una cita en esa fecha.</div>
+</div>`;
+  } else {
+    contenido = `
+<div class="card">
+  ${clinicaGrupo('ag-hoy', `Hoy · ${fmtF(hoyIso)}`, `<span class="grupoListaTotal">${citasHoy.length} ${citasHoy.length === 1 ? 'cita' : 'citas'}</span>`, citasHoy.map(c => filaCita(c)).join('') || listaVacia('No hay citas para hoy.'), true)}
+  ${clinicaGrupo('ag-prox', 'Próximas', `<span class="grupoListaTotal">${proximas.length}</span>`, proximas.map(c => filaCita(c)).join('') || listaVacia('No hay citas próximas.'), true)}
+  ${clinicaGrupo('ag-pasadas', 'Pasadas', `<span class="grupoListaTotal">${pasadas.length}</span>`, pasadas.map(c => filaCita(c)).join('') || listaVacia('No hay citas pasadas.'), false)}
+</div>`;
+  }
+  setC(`
+<div class="tilesGrandes tres">
+  ${tileGrande('🗓️', 'Calendario', `${MESES_ES[calMonth]} ${calYear}`, "agendaCambiarVista('calendario')", agendaVista === 'calendario')}
+  ${tileGrande('📋', 'Lista de citas', `${citasHoy.length} hoy · ${proximas.length} próximas`, "agendaCambiarVista('lista')", agendaVista === 'lista')}
+  ${tileGrande('➕', 'Nueva cita', 'Agendar', "prepModalCita();openModal('modalCita')")}
+</div>
+${contenido}`);
+}
+
+// ── PACIENTES ─────────────────────────────────────
 function verPaciente(id) {
   const p = getPac(id);
   const hists = state.historias.filter(h => String(h.pacienteId) === String(id));
@@ -141,7 +329,7 @@ function verPaciente(id) {
     <div class="pacAvatar">${initials(p.nombre)}</div>
     <div>
       <div style="font-size:18px;font-weight:600;font-family:'DM Serif Display',serif">${p.nombre}</div>
-      <div style="font-size:13px;color:#888">${p.email||''} ${p.tel?'· '+p.tel:''}</div>
+      <div style="font-size:13px;color:#888">${[p.email, p.tel].filter(Boolean).map(escapeHtml).join(' · ')}</div>
     </div>
     <div style="margin-left:auto;display:flex;gap:.4rem;flex-wrap:wrap">
       <button class="btn btn-sm btn-primary" onclick="prepModalCita('${p.id}');openModal('modalCita')">+ Cita</button>
@@ -163,31 +351,12 @@ function verPaciente(id) {
 <div class="card">
   <div class="cardTitle">📋 Historias clínicas (${hists.length})</div>
   ${hists.length===0 ? '<p style="color:#aaa;font-size:13px">Sin historias registradas.</p>' : ''}
-  <table><tbody>${hists.slice().reverse().map(h => `<tr>
-    <td>${fmtF(h.fecha)}</td>
-    <td>${h.motivo}</td>
-    <td><span class="badge badge-blue">${h.diagnostico}</span></td>
-    <td><div style="display:flex;gap:.35rem;flex-wrap:wrap">
-      <button class="btn btn-sm btn-outline" onclick="verHistoria('${h.id}')">Ver</button>
-      <button class="btn btn-sm btn-primary" onclick="prepModalHistoria(null,'${h.id}');openModal('modalHistoria')">Editar</button>
-      <button class="btn btn-sm btn-outline" onclick="borrarHistoria('${h.id}')">Borrar</button>
-    </div></td>
-  </tr>`).join('')}</tbody></table>
+  <div class="listaPlana">${historiasRecientes(hists).map(h => filaHistoria(h, false)).join('')}</div>
 </div>
 <div class="card">
   <div class="cardTitle">📅 Citas (${citas.length})</div>
   ${citas.length===0 ? '<p style="color:#aaa;font-size:13px">Sin citas registradas.</p>' : ''}
-  <table><tbody>${citas.slice().reverse().map(c => `<tr>
-    <td>${fmtF(c.fecha)} ${c.hora}</td>
-    <td>${c.tipo}</td>
-    <td><span class="badge ${citaBadgeClass(c.estado)}">${c.estado}</span></td>
-    <td><div style="display:flex;gap:.35rem;flex-wrap:wrap">
-      ${c.estado!=='confirmada'?`<button class="btn btn-sm btn-outline" onclick="confirmarCita('${c.id}')">Confirmar</button>`:''}
-      ${c.estado!=='cancelada'?`<button class="btn btn-sm btn-outline" onclick="cancelarCita('${c.id}')">Cancelar cita</button>`:''}
-      <button class="btn btn-sm btn-primary" onclick="prepModalCita(null,'${c.id}');openModal('modalCita')">Editar</button>
-      <button class="btn btn-sm btn-outline" onclick="borrarCita('${c.id}')">Borrar</button>
-    </div></td>
-  </tr>`).join('')}</tbody></table>
+  <div class="listaPlana">${ordenarCitas(citas, true).map(c => filaCita(c, false)).join('')}</div>
 </div>`);
 }
 // ── HISTORIAS ─────────────────────────────────────
@@ -449,39 +618,6 @@ function borrarHistoria(id) {
 }
 
 // ── AGENDA ────────────────────────────────────────
-function renderHistorias() {
-  setC(`
-<div class="searchRow">
-  <input type="text" id="searchHist" placeholder="Buscar por codigo, paciente o diagnostico..." oninput="filtrarHistorias()"/>
-  <button class="btn btn-primary" onclick="prepModalHistoria();openModal('modalHistoria')">+ Nueva historia</button>
-</div>
-<div class="card" style="padding:.5rem">
-  <table><thead><tr><th>Codigo</th><th>Paciente</th><th>Fecha</th><th>Motivo</th><th>Diagnostico</th><th>Adjuntos</th><th>PA</th><th>Acciones</th></tr></thead>
-  <tbody id="tablaHistorias">${rowsHistorias(state.historias)}</tbody></table>
-</div>`);
-}
-function rowsHistorias(lista) {
-  if (!lista.length) return '<tr><td colspan="8" style="text-align:center;color:#aaa;padding:1.5rem">No se encontraron historias.</td></tr>';
-  return lista.slice().reverse().map(h => `<tr>
-    <td><span class="badge badge-gray">${patientCode(getPac(h.pacienteId))}</span></td>
-    <td><span style="font-weight:500">${getPac(h.pacienteId).nombre}</span></td>
-    <td>${fmtF(h.fecha)}</td>
-    <td>${h.motivo || ''}</td>
-    <td><span class="badge badge-blue">${h.diagnostico || ''}</span></td>
-    <td><span class="badge ${h.adjuntos?.length?'badge-green':'badge-gray'}">${h.adjuntos?.length || 0}</span></td>
-    <td>${h.ta||'—'}</td>
-    <td><div style="display:flex;gap:.35rem;flex-wrap:wrap">
-      <button class="btn btn-sm btn-outline" onclick="verHistoria('${h.id}')">Ver</button>
-      <button class="btn btn-sm btn-primary" onclick="prepModalHistoria(null,'${h.id}');openModal('modalHistoria')">Editar</button>
-      <button class="btn btn-sm btn-outline" onclick="borrarHistoria('${h.id}')">Borrar</button>
-    </div></td>
-  </tr>`).join('');
-}
-function filtrarHistorias() {
-  const q = document.getElementById('searchHist').value.toLowerCase();
-  const res = state.historias.filter(h => patientCode(getPac(h.pacienteId)).includes(q) || getPac(h.pacienteId).nombre.toLowerCase().includes(q) || (h.diagnostico||'').toLowerCase().includes(q) || (h.motivo||'').toLowerCase().includes(q));
-  document.getElementById('tablaHistorias').innerHTML = rowsHistorias(res);
-}
 function verHistoria(id) {
   const h = state.historias.find(x => String(x.id) === String(id));
   if (!h) return;
@@ -530,57 +666,5 @@ async function removeHistoriaAttachment(histId, attId) {
   verHistoria(histId);
 }
 
-function renderAgenda() {
-  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  const dias  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-  const hoy   = new Date();
-  const primerDia = new Date(calYear, calMonth, 1).getDay();
-  const ultDia    = new Date(calYear, calMonth+1, 0).getDate();
-  const prevUlt   = new Date(calYear, calMonth, 0).getDate();
-  let cells = '', d = 1, extra = 1;
-  for (let i = 0; i < 42; i++) {
-    let dayNum, isOther = false;
-    if (i < primerDia)      { dayNum = prevUlt - (primerDia - 1 - i); isOther = true; }
-    else if (d > ultDia)    { dayNum = extra++; isOther = true; d++; }
-    else                    { dayNum = d++; }
-    const isHoy = !isOther && dayNum===hoy.getDate() && calMonth===hoy.getMonth() && calYear===hoy.getFullYear();
-    const fStr  = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(isOther?0:dayNum).padStart(2,'0')}`;
-    const evs   = isOther ? [] : state.citas.filter(c => c.fecha === `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`);
-    cells += `<div class="calDay${isOther?' otherMonth':''}${isHoy?' today':''}" ${!isOther?`onclick="diaClick(${calYear},${calMonth+1},${dayNum})"`:''}>
-      <div class="dayNum">${dayNum}</div>
-      ${evs.slice(0,2).map(c => `<div class="ev${c.estado==='confirmada'?' conf':c.estado==='cancelada'?' cancelada':' reminder'}">${c.hora} ${getPac(c.pacienteId).nombre.split(' ')[0]}</div>`).join('')}
-      ${evs.length>2 ? `<div style="font-size:9px;color:#888">+${evs.length-2}</div>` : ''}
-    </div>`;
-  }
-  setC(`
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-  <div class="calNav">
-    <button onclick="cambiarMes(-1)">‹</button>
-    <h4>${meses[calMonth]} ${calYear}</h4>
-    <button onclick="cambiarMes(1)">›</button>
-  </div>
-  <button class="btn btn-primary" onclick="prepModalCita();openModal('modalCita')">+ Nueva cita</button>
-</div>
-<div class="card" style="padding:.75rem">
-  <div class="calGrid">${dias.map(d=>`<div class="calHead">${d}</div>`).join('')}${cells}</div>
-</div>
-<div class="card" style="padding:.5rem">
-  <div class="cardTitle" style="padding:.5rem .25rem 0">📋 Lista de citas</div>
-  <table><thead><tr><th>Fecha</th><th>Hora</th><th>Paciente</th><th>Tipo</th><th>Recordatorio</th><th>Estado</th><th>Acción</th></tr></thead>
-  <tbody>${state.citas.slice().sort((a,b)=>a.fecha>b.fecha?1:-1).map(c => `<tr>
-    <td>${fmtF(c.fecha)}</td><td><strong>${c.hora}</strong></td>
-    <td>${getPac(c.pacienteId).nombre}</td>
-    <td>${c.tipo}</td>
-    <td><span class="badge badge-warn">${c.recordatorio || 'Calendario general'}</span></td>
-    <td><span class="badge ${citaBadgeClass(c.estado)}">${c.estado}</span></td>
-    <td><div style="display:flex;gap:.35rem;flex-wrap:wrap">
-      ${c.estado!=='confirmada'?`<button class="btn btn-sm btn-outline" onclick="confirmarCita('${c.id}')">Confirmar</button>`:'<span style="color:#aaa;font-size:12px">✓ Confirmada</span>'}
-      ${c.estado!=='cancelada'?`<button class="btn btn-sm btn-outline" onclick="cancelarCita('${c.id}')">Cancelar cita</button>`:'<span style="color:#aaa;font-size:12px">Cancelada</span>'}
-      <button class="btn btn-sm btn-primary" onclick="prepModalCita(null,'${c.id}');openModal('modalCita')">Editar</button>
-      <button class="btn btn-sm btn-outline" onclick="borrarCita('${c.id}')">Borrar</button>
-    </div></td>
-  </tr>`).join('')}</tbody></table>
-</div>`);
-}
 function cambiarMes(d) { calMonth += d; if(calMonth>11){calMonth=0;calYear++;} else if(calMonth<0){calMonth=11;calYear--;} renderAgenda(); }
 function diaClick(y,m,d) { prepModalCita(); document.getElementById('cFecha').value = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; openModal('modalCita'); }
