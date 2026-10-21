@@ -761,6 +761,7 @@ ${isOcupViewer() ? '' : `<div class="card">
     <button class="btn btn-outline" onclick="openOccupationalScansFolder()">Probar carpeta</button>
   </div>
 </div>`}
+${isOcupViewer() ? '' : renderOccMedicosConfig()}
 ${isOcupViewer() ? '' : `<div class="card">
   <div class="cardTitle">Nueva empresa</div>
   <div class="fRow">
@@ -1203,6 +1204,7 @@ function renderOccRegFormulario(editing) {
   </div>`)}
   ${paso(7, `
   <div class="fRow">
+    ${renderOccMedicoSelect(editing)}
     <div class="fGroup"><label>Aptitud laboral</label><select id="occAptitud"><option ${aptSelected('Apto')}>Apto</option><option ${aptSelected('Apto con restricción')}>Apto con restricción</option><option ${aptSelected('No apto con restricción')}>No apto con restricción</option><option ${aptSelected('No apto')}>No apto</option></select></div>
   </div>
   ${renderOccDictamenYConsentimiento(editing, { plano:true, parte:'dictamen' })}`)}
@@ -1328,6 +1330,7 @@ async function guardarOcupacionalRegistro() {
   editingOcupRegistroId = null;
   occRegUltimos.planta = planta;
   occRegUltimos.fecha = fecha;
+  if (formRegistro.medicoId) occRegUltimos.medicoId = formRegistro.medicoId;
   occRegVista = 'lista';
   occRegPaso = 1;
   occRegPasosVistos = new Set();

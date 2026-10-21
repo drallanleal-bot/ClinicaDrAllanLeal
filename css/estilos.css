@@ -1004,3 +1004,25 @@ button.statBox:hover{border-color:var(--green-mid)}
   .occHeaderAcciones{width:100%}
   .filaSimple{flex-wrap:wrap;padding:.6rem .75rem}
 }
+/* Firma del médico sobre la leyenda de protección (pantalla e impresión) */
+.docFirmaBloque{max-width:340px}
+.docFirmaZona{position:relative;height:118px;border:1px dashed #b9c2c8;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff}
+.docLeyenda{text-align:center;font-size:9.5px;line-height:1.3;color:#8a949b;letter-spacing:.02em;padding:4px 8px;font-family:Arial,sans-serif}
+.docLeyenda div:first-child{font-weight:700}
+.docFirmaImg{position:absolute;left:50%;top:50%;transform:translate(-55%,-50%);max-width:78%;max-height:88%;mix-blend-mode:multiply}
+.docSelloImg{position:absolute;right:6px;top:50%;transform:translateY(-50%);max-height:92%;max-width:42%;opacity:.92;mix-blend-mode:multiply}
+.docFirmaPie{font-size:10px;color:#555;text-align:center;margin-top:2px}
+.docPreview{padding:.75rem;border:1px solid var(--border);border-radius:8px;background:#fff;color:#111;font-size:12px}
+.docPreview .docLinea{display:flex;align-items:flex-end;gap:8px;margin:8px 0}
+.docPreview .docLinea span{white-space:nowrap;font-weight:600}
+.docPreview .docLinea i{flex:1;border-bottom:1px solid #333;font-style:normal;min-height:16px}
+@media print{.docFirmaZona,.docFirmaImg,.docSelloImg{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+.medicoFila{padding:.9rem 1rem;border-top:1px solid var(--border)}
+.medicoFila:first-child{border-top:0}
+.medicoFirmas{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin:.25rem 0 .5rem}
+.medicoImg{width:170px;height:70px;border:1px dashed #c5cfca;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fff;overflow:hidden}
+.medicoImg img{max-width:95%;max-height:90%}
+.medicoImg span{font-size:12px;color:var(--muted)}
+.medicoBotones{display:flex;gap:.4rem;flex-wrap:wrap;flex:1}
+.medicoBotones label.btn{cursor:pointer}
+.medicoCheck{display:flex;gap:.45rem;align-items:flex-start;font-size:13px;color:#4d5b55}
