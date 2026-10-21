@@ -212,6 +212,8 @@ function camposDocumentosOcupacionales() {
     restriccionDetalle:document.getElementById('occRestriccionDetalle')?.value.trim() || '',
     recomendaciones:document.getElementById('occRecomendaciones')?.value.trim() || ''
   };
+  const medicoSel = document.getElementById('occMedico');
+  if (medicoSel) campos.medicoId = medicoSel.value || 'otro';
   const firma = leerOccFirmaPad();
   if (firma) {
     campos.consentimientoFirma = firma;
@@ -241,13 +243,10 @@ function docCampo(label, valor) {
   return `<div class="docCampo"><span>${escapeHtml(label)}:</span> <b>${escapeHtml(valor || '')}</b></div>`;
 }
 
-function docFirmaMedico() {
+function docFirmaMedico(r) {
+  const medico = occMedicoDeRegistro(r);
   return `<div class="docSeccion">FIRMA DEL MÉDICO EVALUADOR</div>
-    <div class="docFirmaMedico">
-      <div class="docLinea"><span>Nombre:</span><i></i></div>
-      <div class="docLinea"><span>Colegiado No.:</span><i></i></div>
-      <div class="docLinea docLineaAlta"><span>Firma y sello:</span><i></i></div>
-    </div>`;
+    ${docBloqueFirma(r, medico, occFirmaDigitalPermitida(medico))}`;
 }
 
 function documentoEvaluacionHtml(r) {
@@ -279,7 +278,7 @@ function documentoEvaluacionHtml(r) {
     ${dictamenes}
     <div class="docSeccion">RECOMENDACIONES</div>
     <div class="docTextoLibre">${escapeHtml(r.recomendaciones || '')}</div>
-    ${docFirmaMedico()}
+    ${docFirmaMedico(r)}
     <div class="docSeccion">ANEXO 1. CRITERIOS DE APTITUD MÉDICA OCUPACIONAL</div>
     <table class="docTabla docAnexo"><thead><tr><th>Dictamen</th><th>Descripción breve</th><th>Ejemplo clínico</th></tr></thead><tbody>
       <tr><td>APTO SIN RESTRICCIONES</td><td>El trabajador puede realizar todas las funciones del puesto sin riesgo para su salud o la de otros.</td><td>Ejemplo: operario sano sin alteraciones médicas ni paraclínicas.</td></tr>
@@ -322,4 +321,232 @@ function imprimirDocumentoOcupacional(id, tipo) {
     window.addEventListener('afterprint', terminar);
     window.print();
   });
+}
+
+// ── Médicos evaluadores, firma digital y leyenda de protección ──
+// La firma digital se guarda en el estado compartido de Firebase (solo administradores), nunca en el repositorio.
+// Encima de la leyenda va la firma (digital o a mano): así la firma impresa queda atada a ese documento.
+const OCC_LEYENDA_PREDETERMINADA = [
+  'EVALUACIÓN MÉDICA OCUPACIONAL ANUAL',
+  'Uso exclusivo para el presente dictamen',
+  '{empresa} · Planta {planta}',
+  'Trabajador: {nombre}',
+  'Exp. {expediente} · {mes}',
+  'No válido para otro fin'
+].join('\n');
+
+function ensureMedicos() {
+  if (!Array.isArray(state.medicos)) {
+    state.medicos = [
+      { id:'drleal', nombre:'Dr. Allan Leal', colegiado:'', usuario:'drleal', firma:'', sello:'', soloConSuSesion:true }
+    ];
+  }
+  return state.medicos;
+}
+function occMedicoPorId(id) { return ensureMedicos().find(m => String(m.id) === String(id)) || null; }
+function occMedicoDeRegistro(r) { return r && r.medicoId ? occMedicoPorId(r.medicoId) : null; }
+function occFirmaDigitalPermitida(m) {
+  if (!m || !m.firma) return false;
+  return !m.soloConSuSesion || (!!m.usuario && currentUser?.username === m.usuario);
+}
+function occLeyendaEmpresa(emp = activeOccCompany()) {
+  const t = String(emp?.leyendaFirma ?? '').trim();
+  return t || OCC_LEYENDA_PREDETERMINADA;
+}
+function occLeyendaLineas(r = {}, emp = activeOccCompany()) {
+  const fecha = String(r.fechaEvaluacion || '');
+  const [y, m] = fecha.split('-');
+  const mes = y && m ? `${(typeof MESES_ES !== 'undefined' ? MESES_ES[Number(m) - 1] : m) || m} ${y}` : '';
+  const datos = { empresa:emp?.nombre || '', planta:r.planta || '', fecha:fmtF(fecha), nombre:r.nombre || '', expediente:r.expediente || '', dpi:r.dpi || '', mes, anio:y || '' };
+  return occLeyendaEmpresa(emp).split('\n').map(l => l.replace(/\{(\w+)\}/g, (all, k) => (k in datos ? datos[k] : all)).trim()).filter(Boolean).slice(0, 8);
+}
+
+// Bloque que se imprime en el dictamen (también se usa para la vista previa).
+function docBloqueFirma(r, medico, aplicarDigital) {
+  return `<div class="docFirmaBloque">
+    <div class="docFirmaZona">
+      <div class="docLeyenda">${occLeyendaLineas(r).map(l => `<div>${escapeHtml(l)}</div>`).join('')}</div>
+      ${aplicarDigital && medico.sello ? `<img class="docSelloImg" src="${medico.sello}" alt="">` : ''}
+      ${aplicarDigital ? `<img class="docFirmaImg" src="${medico.firma}" alt="">` : ''}
+    </div>
+    <div class="docFirmaPie">Firma y sello</div>
+    <div class="docLinea"><span>Nombre:</span><i>${medico ? escapeHtml(medico.nombre || '') : ''}</i></div>
+    <div class="docLinea"><span>Colegiado No.:</span><i>${medico ? escapeHtml(medico.colegiado || '') : ''}</i></div>
+  </div>`;
+}
+
+// Selector del médico en la sección "Aptitud laboral" del formulario.
+function renderOccMedicoSelect(editing) {
+  const medicos = ensureMedicos();
+  const propio = medicos.find(m => m.usuario && m.usuario === currentUser?.username);
+  const elegido = editing ? (editing.medicoId || 'otro') : (occRegUltimos.medicoId ?? (propio?.id || medicos[0]?.id || 'otro'));
+  return `<div class="fGroup"><label>Médico evaluador (firma)</label>
+    <select id="occMedico">
+      ${medicos.map(m => `<option value="${escapeHtml(m.id)}" ${String(m.id) === String(elegido) ? 'selected' : ''}>${escapeHtml(m.nombre)}${m.colegiado ? ` · Col. ${escapeHtml(m.colegiado)}` : ''}${occFirmaDigitalPermitida(m) ? ' · firma digital' : ' · firma a mano'}</option>`).join('')}
+      <option value="otro" ${elegido === 'otro' ? 'selected' : ''}>Otro médico (llenar y firmar a mano)</option>
+    </select>
+    <div class="attachHint">Con firma digital, su firma sale impresa sobre la leyenda. Los demás quedan con el espacio para firmar y sellar en papel.</div>
+  </div>`;
+}
+
+// Convierte la foto de la firma o sello en una imagen con fondo transparente, recortada y liviana.
+function procesarImagenFirma(file, maxW, maxH) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const escala = Math.min(1, 1400 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * escala));
+      c.height = Math.max(1, Math.round(img.height * escala));
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      const data = ctx.getImageData(0, 0, c.width, c.height);
+      const px = data.data;
+      // Fondo claro = transparente; tinta = un solo color (el promedio de la tinta), para que pese poco.
+      let sr = 0, sg = 0, sb = 0, n = 0;
+      const alfa = new Uint8ClampedArray(c.width * c.height);
+      for (let i = 0, p = 0; i < px.length; i += 4, p++) {
+        const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+        const a = Math.max(0, Math.min(255, Math.round((205 - lum) * 255 / 95)));
+        alfa[p] = a;
+        if (a > 160) { sr += px[i]; sg += px[i + 1]; sb += px[i + 2]; n++; }
+      }
+      if (!n) { reject(new Error('No se encontró la firma en la foto. Use papel blanco y tinta oscura.')); return; }
+      const r = Math.round(sr / n), g = Math.round(sg / n), b = Math.round(sb / n);
+      let minX = c.width, minY = c.height, maxX = -1, maxY = -1;
+      for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+        if (alfa[y * c.width + x] > 40) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+      }
+      for (let i = 0, p = 0; i < px.length; i += 4, p++) { px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = alfa[p]; }
+      ctx.putImageData(data, 0, 0);
+      const pad = 6;
+      minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+      maxX = Math.min(c.width - 1, maxX + pad); maxY = Math.min(c.height - 1, maxY + pad);
+      const w = maxX - minX + 1, h = maxY - minY + 1;
+      const k = Math.min(1, maxW / w, maxH / h);
+      const out = document.createElement('canvas');
+      out.width = Math.max(1, Math.round(w * k));
+      out.height = Math.max(1, Math.round(h * k));
+      out.getContext('2d').drawImage(c, minX, minY, w, h, 0, 0, out.width, out.height);
+      resolve(out.toDataURL('image/png'));
+    };
+    img.src = url;
+  });
+}
+
+// ── Configuración (página Empresas) ──
+function renderOccMedicosConfig() {
+  const medicos = ensureMedicos();
+  const emp = activeOccCompany();
+  const ejemplo = { planta:(emp?.plantas || [])[0] || 'MIXCO', fechaEvaluacion:todayLocalISO(), nombre:'Nombre del trabajador', expediente:'TRO-MIX-2026-0001' };
+  const conFirma = medicos.find(m => m.firma);
+  return `<div class="card" id="occMedicosCard">
+  <div class="cardTitle">✍️ Médicos evaluadores y firma</div>
+  <div class="listaPlana">
+    ${medicos.map(m => `<div class="medicoFila" data-id="${escapeHtml(m.id)}">
+      <div class="fRow three">
+        <div class="fGroup"><label>Nombre</label><input data-campo="nombre" value="${escapeHtml(m.nombre || '')}"></div>
+        <div class="fGroup"><label>Colegiado No.</label><input data-campo="colegiado" value="${escapeHtml(m.colegiado || '')}" placeholder="Ej: 12,345"></div>
+        <div class="fGroup"><label>Usuario de la app</label><input data-campo="usuario" value="${escapeHtml(m.usuario || '')}" placeholder="Vacío si firma a mano"></div>
+      </div>
+      <div class="medicoFirmas">
+        <div class="medicoImg">${m.firma ? `<img src="${m.firma}" alt="Firma">` : '<span>Sin firma digital</span>'}</div>
+        <div class="medicoImg">${m.sello ? `<img src="${m.sello}" alt="Sello">` : '<span>Sin sello digital</span>'}</div>
+        <div class="medicoBotones">
+          <label class="btn btn-sm btn-outline">📷 ${m.firma ? 'Cambiar firma' : 'Subir firma'}<input type="file" accept="image/*" hidden onchange="subirImagenMedico('${escapeHtml(m.id)}','firma',this)"></label>
+          <label class="btn btn-sm btn-outline">🔵 ${m.sello ? 'Cambiar sello' : 'Subir sello (opcional)'}<input type="file" accept="image/*" hidden onchange="subirImagenMedico('${escapeHtml(m.id)}','sello',this)"></label>
+          ${m.firma || m.sello ? `<button type="button" class="btn btn-sm btn-outline" onclick="quitarImagenesMedico('${escapeHtml(m.id)}')">Quitar firma y sello</button>` : ''}
+          <button type="button" class="btn btn-sm btn-outline filaBorrar" onclick="quitarMedico('${escapeHtml(m.id)}')">Quitar médico</button>
+        </div>
+      </div>
+      <label class="medicoCheck"><input type="checkbox" data-campo="soloConSuSesion" ${m.soloConSuSesion !== false ? 'checked' : ''}> Aplicar la firma digital solo cuando este médico inició sesión (si imprime otra persona, sale el espacio en blanco)</label>
+    </div>`).join('')}
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.75rem 0 1.25rem">
+    <button class="btn btn-outline" onclick="agregarMedico()">+ Agregar médico</button>
+    <button class="btn btn-primary" onclick="guardarMedicosYLeyenda()">Guardar</button>
+  </div>
+  <div class="attachHint" style="margin-bottom:1rem">Para la foto: firme en papel blanco con tinta oscura, tome la foto de frente y con buena luz. La app quita el fondo sola. La firma queda guardada en Firebase, solo visible para administradores.</div>
+  <div class="fRow" style="align-items:flex-start">
+    <div class="fGroup">
+      <label>Leyenda de protección (${escapeHtml(emp?.nombre || '')})</label>
+      <textarea id="occLeyendaTexto" rows="7" oninput="previewLeyendaFirma()">${escapeHtml(occLeyendaEmpresa(emp))}</textarea>
+      <div class="attachHint">Una línea por renglón (máximo 8). Se reemplazan solos: {empresa}, {planta}, {fecha}, {mes}, {anio}, {nombre}, {expediente}, {dpi}.</div>
+      <button type="button" class="btn btn-sm btn-outline" style="margin-top:.5rem" onclick="document.getElementById('occLeyendaTexto').value=OCC_LEYENDA_PREDETERMINADA;previewLeyendaFirma()">Restablecer leyenda</button>
+    </div>
+    <div class="fGroup">
+      <label>Vista previa en el dictamen</label>
+      <div class="docPreview" id="occLeyendaPreview">${docBloqueFirma(ejemplo, conFirma || medicos[0] || null, !!conFirma)}</div>
+    </div>
+  </div>
+</div>`;
+}
+function previewLeyendaFirma() {
+  const box = document.getElementById('occLeyendaPreview');
+  const txt = document.getElementById('occLeyendaTexto');
+  if (!box || !txt) return;
+  const emp = { ...activeOccCompany(), leyendaFirma:txt.value };
+  const ejemplo = { planta:(emp.plantas || [])[0] || 'MIXCO', fechaEvaluacion:todayLocalISO(), nombre:'Nombre del trabajador', expediente:'TRO-MIX-2026-0001' };
+  const lineas = occLeyendaLineas(ejemplo, emp);
+  const ley = box.querySelector('.docLeyenda');
+  if (ley) ley.innerHTML = lineas.map(l => `<div>${escapeHtml(l)}</div>`).join('');
+}
+function leerMedicosDelFormulario() {
+  document.querySelectorAll('#occMedicosCard .medicoFila').forEach(fila => {
+    const m = occMedicoPorId(fila.dataset.id);
+    if (!m) return;
+    fila.querySelectorAll('[data-campo]').forEach(el => {
+      const campo = el.dataset.campo;
+      m[campo] = el.type === 'checkbox' ? el.checked : (campo === 'usuario' ? el.value.trim().toLowerCase() : el.value.trim());
+    });
+  });
+  const txt = document.getElementById('occLeyendaTexto');
+  if (txt) activeOccCompany().leyendaFirma = txt.value.trim() === OCC_LEYENDA_PREDETERMINADA ? '' : txt.value.trim();
+}
+async function guardarMedicosYLeyenda(aviso = true) {
+  leerMedicosDelFormulario();
+  await saveAppData({ backupToFolder:true });
+  await saveOccupationalStateToCloud(true);
+  if (aviso) showToast('Médicos y leyenda guardados.');
+  renderOcupEmpresas();
+}
+function agregarMedico() {
+  leerMedicosDelFormulario();
+  ensureMedicos().push({ id:`med-${Date.now()}`, nombre:'', colegiado:'', usuario:'', firma:'', sello:'', soloConSuSesion:true });
+  renderOcupEmpresas();
+  setTimeout(() => document.querySelector('#occMedicosCard .medicoFila:last-child input')?.focus(), 0);
+}
+async function quitarMedico(id) {
+  const m = occMedicoPorId(id);
+  if (!m) return;
+  if (!confirm(`¿Quitar a ${m.nombre || 'este médico'} de la lista? Las evaluaciones ya guardadas con este médico saldrán con el espacio en blanco.`)) return;
+  leerMedicosDelFormulario();
+  state.medicos = ensureMedicos().filter(x => String(x.id) !== String(id));
+  await guardarMedicosYLeyenda(false);
+}
+async function quitarImagenesMedico(id) {
+  const m = occMedicoPorId(id);
+  if (!m || !confirm('¿Quitar la firma y el sello digital de este médico?')) return;
+  leerMedicosDelFormulario();
+  m.firma = ''; m.sello = '';
+  await guardarMedicosYLeyenda(false);
+  showToast('Firma y sello quitados.');
+}
+async function subirImagenMedico(id, tipo, input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  try {
+    leerMedicosDelFormulario();
+    const dataUrl = tipo === 'sello' ? await procesarImagenFirma(file, 320, 320) : await procesarImagenFirma(file, 520, 200);
+    const m = occMedicoPorId(id);
+    if (!m) return;
+    m[tipo] = dataUrl;
+    await guardarMedicosYLeyenda(false);
+    showToast(tipo === 'sello' ? 'Sello guardado.' : 'Firma guardada.');
+  } catch (e) {
+    alert(e.message || 'No se pudo procesar la imagen.');
+  }
 }
