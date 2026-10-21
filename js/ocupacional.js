@@ -772,7 +772,7 @@ ${isOcupViewer() ? '' : `<div class="card">
 </div>`}`);
 }
 // ── Dashboard ocupacional: filtros compactos y un reporte abierto a la vez ──
-let occDashReporte = 'planta';
+let occDashReporte = null;
 function occDashVerReporte(id) { occDashReporte = id; renderOcupDashboard(); }
 function occDashLimpiarFiltros() {
   ['occDashDateStart','occDashDateEnd'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -824,7 +824,10 @@ function renderOcupDashboard() {
     (dateStartFilter || dateEndFilter) ? `${dateStartFilter ? fmtF(dateStartFilter) : '…'} a ${dateEndFilter ? fmtF(dateEndFilter) : '…'}` : ''
   ].filter(Boolean).join(' · ');
   const hayFiltros = plantFilter !== 'TODAS' || yearFilter !== 'TODOS' || dateStartFilter || dateEndFilter;
+  occDashRegistrosActuales = records;
+  const nFirmados = records.filter(r => r.firmaMedico).length;
   const reportes = [
+    { id:'firmados', icono:'✅', titulo:'Dictámenes firmados', sub:`${nFirmados} listos para imprimir` },
     { id:'planta', icono:'🏭', titulo:'Aptitud por planta', sub:`${occData().plantas.length} plantas` },
     { id:'noaptos', icono:'⚠️', titulo:'No aptos y restricciones', sub:`${noAptos.length} no aptos · ${conRestriccion.length} restricción` },
     { id:'doping', icono:'🧪', titulo:'Doping', sub:`${dopingPositivos.length} positivos` },
@@ -835,6 +838,9 @@ function renderOcupDashboard() {
   ];
   const vacio = texto => `<div class="listaVacia">${escapeHtml(texto)}</div>`;
   const contenidoReporte = {
+    firmados: `<div class="occRegBuscar"><input value="${escapeHtml(occFirmadosBusca)}" placeholder="🔍 Buscar por nombre del trabajador" oninput="occBuscarFirmados(this.value)" aria-label="Buscar dictamen firmado"></div>
+      <div id="occFirmadosLista">${occFilasFirmados(records)}</div>
+      <div class="attachHint" style="margin-top:.6rem">Se imprime con la firma y el sello del médico. Elija «Guardar como PDF» en la ventana de impresión si necesita el archivo.</div>`,
     planta: `<table><thead><tr><th>Planta</th><th>Total</th><th>Apto</th><th>Apto c/restr.</th><th>No apto c/restr.</th><th>No apto</th></tr></thead><tbody>${plantRows}</tbody></table>`,
     noaptos: `<div class="occSubtitulo">No aptos (${noAptos.length})</div>${occListaTrabajadores(noAptos) || vacio('Sin no aptos en estos filtros.')}
       <div class="occSubtitulo" style="margin-top:1rem">Aptos con restricción (${conRestriccion.length})</div>${occListaTrabajadores(conRestriccion, r => r.restriccionDetalle ? `<span class="filaSub">Restricción: ${escapeHtml(r.restriccionDetalle)}</span>` : '') || vacio('Sin restricciones en estos filtros.')}`,
@@ -851,6 +857,7 @@ function renderOcupDashboard() {
       ${archivos.length ? `<div class="listaPlana">${archivos.slice(0, 25).map(f => `<div class="filaSimple"><span class="filaTexto"><strong>${escapeHtml(f.nombreArchivo)}</strong><span class="filaSub">${escapeHtml(f.ruta)}</span></span><span class="filaMarca">${escapeHtml(f.tamano || '')}</span></div>`).join('')}</div>` : vacio('Aún no se ha indexado una carpeta.')}
       ${archivos.length > 25 ? `<div class="attachHint" style="margin-top:.5rem">Se muestran 25 de ${archivos.length}.</div>` : ''}`
   };
+  if (!occDashReporte) occDashReporte = isOcupViewer() ? 'firmados' : 'planta';
   if (!contenidoReporte[occDashReporte]) occDashReporte = 'planta';
   const actual = reportes.find(r => r.id === occDashReporte);
   setC(`
@@ -1017,6 +1024,7 @@ function renderOccRegFila(r) {
       <span class="occRegFilaMarcas">
         ${dopingPositivo ? '<span class="badge aptNoApto" title="Doping positivo">Doping +</span>' : ''}
         ${r.consentimientoFirma ? '<span class="occRegFirmado" title="Consentimiento firmado">✍️ ✓</span>' : ''}
+        ${r.firmaMedico ? '<span class="badge aptApto" title="Dictamen firmado por el médico">✅ Firmado</span>' : ''}
         <span class="badge ${occAptClass(r.aptitudLaboral)}">${escapeHtml(r.aptitudLaboral || '—')}</span>
       </span>
     </summary>
@@ -1030,16 +1038,27 @@ function renderOccRegFila(r) {
         <div><span>Doping</span>${escapeHtml(r.dopingResultado || 'Pendiente')}${sustancias}</div>
       </div>
       ${dopingPositivo ? `<div style="margin:.2rem 0 .6rem">${dopingPhotoPreview(r.dopingFotos)}</div>` : ''}
+      ${r.firmaMedico ? `<div class="occFirmaNota">✅ ${escapeHtml(occTextoFirmado(r.firmaMedico))}</div>` : ''}
       <div class="occRegAcciones">
+        ${!r.firmaMedico && occPuedeFirmar(occMedicoDeRegistro(r)) ? `<button class="btn btn-sm btn-blue" onclick="firmarDictamenes(['${r.id}'])">✍️ Firmar</button>` : ''}
         <button class="btn btn-sm btn-primary" onclick="editarOcupacionalRegistro('${r.id}')">Editar</button>
         <button class="btn btn-sm btn-outline" onclick="imprimirDocumentoOcupacional('${r.id}','evaluacion')">📄 Evaluación</button>
         <button class="btn btn-sm btn-outline" onclick="imprimirDocumentoOcupacional('${r.id}','consentimiento')">✍️ Consentimiento${r.consentimientoFirma ? ' ✓' : ''}</button>
+        ${r.firmaMedico ? `<button class="btn btn-sm btn-outline" onclick="quitarFirmaDictamen('${r.id}')">Quitar firma</button>` : ''}
         <button class="btn btn-sm btn-outline occRegBorrar" onclick="borrarOcupacionalRegistro('${r.id}')">Borrar</button>
       </div>
     </div>
   </details>`;
 }
 
+function occRegBarraFirma(g) {
+  const firmados = g.registros.filter(r => r.firmaMedico).length;
+  const firmables = g.registros.filter(r => !r.firmaMedico && occPuedeFirmar(occMedicoDeRegistro(r))).length;
+  return `<div class="occJornadaFirma">
+    <span>✍️ ${firmados} de ${g.registros.length} ${g.registros.length === 1 ? 'dictamen firmado' : 'dictámenes firmados'}</span>
+    ${firmables ? `<button class="btn btn-sm btn-blue" data-key="${escapeHtml(g.key)}" onclick="firmarPendientesJornada(this.dataset.key)">Firmar ${firmables} pendiente${firmables === 1 ? '' : 's'}</button>` : ''}
+  </div>`;
+}
 function renderOccRegLista(records, allRecords, nombreFilter) {
   const grupos = occRegAgruparPorJornada(records);
   if (!occRegJornadasAbiertas) occRegJornadasAbiertas = new Set(grupos.length ? [grupos[0].key] : []);
@@ -1065,7 +1084,7 @@ function renderOccRegLista(records, allRecords, nombreFilter) {
           <span class="occJornadaTotal">${g.registros.length} ${g.registros.length === 1 ? 'evaluación' : 'evaluaciones'}</span>
         </span>
       </summary>
-      <div class="occJornadaFilas">${g.registros.map(renderOccRegFila).join('')}</div>
+      <div class="occJornadaFilas">${occRegBarraFirma(g)}${g.registros.map(renderOccRegFila).join('')}</div>
     </details>`;
   }).join('') || `<div class="occRegVacio">${nombreFilter ? 'No hay evaluaciones con ese nombre.' : 'Aún no hay evaluaciones guardadas. Use «Nueva evaluación» para registrar la primera.'}</div>`}
 </div>`;
@@ -1276,6 +1295,7 @@ async function guardarOcupacionalRegistro() {
   };
   const editIndex = findOcupRegistroIndex(records, searchCandidate);
   const isEdit = editIndex >= 0;
+  if (isEdit && records[editIndex].firmaMedico && !confirm('Este dictamen ya está firmado. Si guarda cambios, la firma se quitará y tendrá que firmarlo de nuevo. ¿Continuar?')) return;
   const id = isEdit ? records[editIndex].id : provisionalId;
   const baseRegistro = isEdit ? records[editIndex] : {};
   const ruffierNoAplica = document.getElementById('occRuffierNoAplica')?.checked || false;
@@ -1320,6 +1340,7 @@ async function guardarOcupacionalRegistro() {
     ? await uploadOcupDopingFotos(formRegistro, previousDopingFotos)
     : [];
   const registro = aplicarFirmaBorrada(isEdit ? mergeOcupRegistro(baseRegistro, formRegistro, true) : formRegistro);
+  if (registro.firmaMedico) registro.firmaMedico = null;
   if (isEdit) records[editIndex] = registro;
   else {
     records.push(registro);

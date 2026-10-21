@@ -213,7 +213,11 @@ function camposDocumentosOcupacionales() {
     recomendaciones:document.getElementById('occRecomendaciones')?.value.trim() || ''
   };
   const medicoSel = document.getElementById('occMedico');
-  if (medicoSel) campos.medicoId = medicoSel.value || 'otro';
+  if (medicoSel) {
+    campos.medicoId = medicoSel.value || 'otro';
+    const mm = occMedicoPorId(campos.medicoId);
+    if (mm) { campos.medicoNombre = mm.nombre; campos.medicoColegiado = mm.colegiado || ''; }
+  }
   const firma = leerOccFirmaPad();
   if (firma) {
     campos.consentimientoFirma = firma;
@@ -244,9 +248,17 @@ function docCampo(label, valor) {
 }
 
 function docFirmaMedico(r) {
-  const medico = occMedicoDeRegistro(r);
+  const f = r.firmaMedico;
+  const pub = occFirmaPublicada(r);
+  const firmado = !!(f && pub && pub.firma);
+  const m = occMedicoDeRegistro(r);
+  let datos = null;
+  if (f) datos = { nombre:f.nombre, colegiado:f.colegiado };
+  else if (r.medicoId && r.medicoId !== 'otro') datos = { nombre:m?.nombre || r.medicoNombre || '', colegiado:m?.colegiado || r.medicoColegiado || '' };
+  if (datos && firmado) { datos.firma = pub.firma; datos.sello = pub.sello || ''; }
   return `<div class="docSeccion">FIRMA DEL MÉDICO EVALUADOR</div>
-    ${docBloqueFirma(r, medico, occFirmaDigitalPermitida(medico))}`;
+    ${docBloqueFirma(r, datos, firmado)}
+    ${firmado ? `<div class="docNota">${escapeHtml(occTextoFirmado(f))}</div>` : ''}`;
 }
 
 function documentoEvaluacionHtml(r) {
@@ -338,17 +350,13 @@ const OCC_LEYENDA_PREDETERMINADA = [
 function ensureMedicos() {
   if (!Array.isArray(state.medicos)) {
     state.medicos = [
-      { id:'drleal', nombre:'Dr. Allan Leal', colegiado:'', usuario:'drleal', firma:'', sello:'', soloConSuSesion:true }
+      { id:'drleal', nombre:'Dr. Allan Leal', colegiado:'', usuario:'drleal', firma:'', sello:'' }
     ];
   }
   return state.medicos;
 }
 function occMedicoPorId(id) { return ensureMedicos().find(m => String(m.id) === String(id)) || null; }
 function occMedicoDeRegistro(r) { return r && r.medicoId ? occMedicoPorId(r.medicoId) : null; }
-function occFirmaDigitalPermitida(m) {
-  if (!m || !m.firma) return false;
-  return !m.soloConSuSesion || (!!m.usuario && currentUser?.username === m.usuario);
-}
 function occLeyendaEmpresa(emp = activeOccCompany()) {
   const t = String(emp?.leyendaFirma ?? '').trim();
   return t || OCC_LEYENDA_PREDETERMINADA;
@@ -382,10 +390,10 @@ function renderOccMedicoSelect(editing) {
   const elegido = editing ? (editing.medicoId || 'otro') : (occRegUltimos.medicoId ?? (propio?.id || medicos[0]?.id || 'otro'));
   return `<div class="fGroup"><label>Médico evaluador (firma)</label>
     <select id="occMedico">
-      ${medicos.map(m => `<option value="${escapeHtml(m.id)}" ${String(m.id) === String(elegido) ? 'selected' : ''}>${escapeHtml(m.nombre)}${m.colegiado ? ` · Col. ${escapeHtml(m.colegiado)}` : ''}${occFirmaDigitalPermitida(m) ? ' · firma digital' : ' · firma a mano'}</option>`).join('')}
+      ${medicos.map(m => `<option value="${escapeHtml(m.id)}" ${String(m.id) === String(elegido) ? 'selected' : ''}>${escapeHtml(m.nombre)}${m.colegiado ? ` · Col. ${escapeHtml(m.colegiado)}` : ''}${m.firma ? ' · firma digital' : ' · firma a mano'}</option>`).join('')}
       <option value="otro" ${elegido === 'otro' ? 'selected' : ''}>Otro médico (llenar y firmar a mano)</option>
     </select>
-    <div class="attachHint">Con firma digital, su firma sale impresa sobre la leyenda. Los demás quedan con el espacio para firmar y sellar en papel.</div>
+    <div class="attachHint">Después de guardar, el médico con firma digital firma desde el listado con «✍️ Firmar» y su contraseña. Sin firmar, el dictamen sale con el espacio para firmar y sellar en papel.</div>
   </div>`;
 }
 
@@ -462,7 +470,7 @@ function renderOccMedicosConfig() {
           <button type="button" class="btn btn-sm btn-outline filaBorrar" onclick="quitarMedico('${escapeHtml(m.id)}')">Quitar médico</button>
         </div>
       </div>
-      <label class="medicoCheck"><input type="checkbox" data-campo="soloConSuSesion" ${m.soloConSuSesion !== false ? 'checked' : ''}> Aplicar la firma digital solo cuando este médico inició sesión (si imprime otra persona, sale el espacio en blanco)</label>
+      <div class="attachHint">${m.firma ? `Solo el usuario «${escapeHtml(m.usuario || '—')}» puede firmar con esta firma, y siempre se le pide la contraseña.` : 'Sin firma digital: sus dictámenes salen con el espacio para firmar y sellar a mano.'}</div>
     </div>`).join('')}
   </div>
   <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.75rem 0 1.25rem">
@@ -515,7 +523,7 @@ async function guardarMedicosYLeyenda(aviso = true) {
 }
 function agregarMedico() {
   leerMedicosDelFormulario();
-  ensureMedicos().push({ id:`med-${Date.now()}`, nombre:'', colegiado:'', usuario:'', firma:'', sello:'', soloConSuSesion:true });
+  ensureMedicos().push({ id:`med-${Date.now()}`, nombre:'', colegiado:'', usuario:'', firma:'', sello:'' });
   renderOcupEmpresas();
   setTimeout(() => document.querySelector('#occMedicosCard .medicoFila:last-child input')?.focus(), 0);
 }
@@ -544,9 +552,154 @@ async function subirImagenMedico(id, tipo, input) {
     const m = occMedicoPorId(id);
     if (!m) return;
     m[tipo] = dataUrl;
+    m.firmaVersion = String(Date.now());
     await guardarMedicosYLeyenda(false);
     showToast(tipo === 'sello' ? 'Sello guardado.' : 'Firma guardada.');
   } catch (e) {
     alert(e.message || 'No se pudo procesar la imagen.');
   }
 }
+
+// ── Firmar dictámenes con contraseña ──
+// Al firmar se guarda en el registro quién firmó, cuándo y un código; la imagen de la firma se publica una
+// sola vez en los datos ocupacionales para que todos los usuarios (incluido ingeniería) impriman el dictamen
+// ya firmado. Si el dictamen se edita, la firma se quita y hay que volver a firmar.
+function occFirmaClave(m) { return `${m.id}-${m.firmaVersion || '1'}`; }
+function occPuedeFirmar(m) { return !!(m && m.firma && m.usuario && currentUser?.username === m.usuario); }
+function occFirmaPublicada(r) {
+  const clave = r?.firmaMedico?.clave;
+  return clave ? (state.ocupacional?.firmasPublicadas || {})[clave] || null : null;
+}
+function occCodigoFirma() {
+  const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => letras[b % letras.length]).join('');
+}
+function occTextoFirmado(f) {
+  return f ? `Firmado digitalmente por ${f.nombre || ''} el ${fmtFechaHora(f.firmadoEn)} · Código ${f.codigo || ''}` : '';
+}
+
+// Ventana para volver a escribir la contraseña (se verifica con Firebase, no se guarda).
+function pedirContrasenaFirma(texto) {
+  return new Promise(resolve => {
+    let modal = document.getElementById('modalFirmar');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.className = 'overlay';
+      modal.id = 'modalFirmar';
+      document.body.appendChild(modal);
+    }
+    modal.innerHTML = `<div class="modal" style="max-width:420px">
+      <div class="modalHead"><h3>✍️ Confirmar firma</h3></div>
+      <p style="font-size:14px;color:#34423d;margin:.25rem 0 1rem">${escapeHtml(texto)}</p>
+      <div class="fGroup"><label>Su contraseña</label><input type="password" id="firmaPwd" autocomplete="current-password"></div>
+      <div id="firmaPwdError" style="color:var(--red);font-size:13px;min-height:18px;margin-top:.35rem"></div>
+      <div class="modalActions" style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.75rem">
+        <button class="btn btn-outline" id="firmaCancelar">Cancelar</button>
+        <button class="btn btn-primary" id="firmaOk">Firmar</button>
+      </div>
+    </div>`;
+    const cerrar = ok => { modal.classList.remove('show'); resolve(ok); };
+    const input = modal.querySelector('#firmaPwd');
+    const error = modal.querySelector('#firmaPwdError');
+    const ok = modal.querySelector('#firmaOk');
+    const intentar = async () => {
+      const pwd = input.value;
+      if (!pwd) { error.textContent = 'Escriba su contraseña.'; input.focus(); return; }
+      ok.disabled = true; ok.textContent = 'Verificando...'; error.textContent = '';
+      try {
+        const usuario = auth && auth.currentUser;
+        if (!usuario || !usuario.email) throw { code:'sin-sesion' };
+        const cred = firebase.auth.EmailAuthProvider.credential(usuario.email, pwd);
+        await usuario.reauthenticateWithCredential(cred);
+        cerrar(true);
+      } catch (e) {
+        ok.disabled = false; ok.textContent = 'Firmar';
+        const codigo = e && e.code ? e.code : '';
+        error.textContent = codigo === 'sin-sesion' ? 'No hay sesión activa. Vuelva a iniciar sesión.'
+          : (codigo.includes('network') ? 'Sin conexión. Revise el internet e intente de nuevo.'
+          : (codigo.includes('too-many') ? 'Demasiados intentos. Espere unos minutos.' : 'Contraseña incorrecta.'));
+        input.select();
+      }
+    };
+    modal.querySelector('#firmaCancelar').onclick = () => cerrar(false);
+    ok.onclick = intentar;
+    input.addEventListener('input', () => { error.textContent = ''; });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') intentar(); });
+    modal.classList.add('show');
+    setTimeout(() => input.focus(), 50);
+  });
+}
+
+async function firmarDictamenes(ids) {
+  const lista = occData().registros.filter(r => ids.map(String).includes(String(r.id)));
+  const pendientes = lista.filter(r => !r.firmaMedico);
+  const firmables = pendientes.filter(r => occPuedeFirmar(occMedicoDeRegistro(r)));
+  if (!firmables.length) {
+    const m = occMedicoDeRegistro(pendientes[0] || lista[0]);
+    alert(!pendientes.length ? 'Ya están firmados.'
+      : !m ? 'Primero elija el médico evaluador en la sección "Aptitud laboral" (Editar).'
+      : !m.firma ? `${m.nombre} no tiene firma digital. Súbala en Empresas > Médicos evaluadores y firma.`
+      : `Solo ${m.nombre} puede firmar estos dictámenes con su propio usuario.`);
+    return;
+  }
+  const medico = occMedicoDeRegistro(firmables[0]);
+  const texto = firmables.length === 1
+    ? `Va a firmar el dictamen de ${firmables[0].nombre} como ${medico.nombre}.`
+    : `Va a firmar ${firmables.length} dictámenes como ${medico.nombre}.`;
+  if (!await pedirContrasenaFirma(texto)) return;
+  const ahora = new Date().toISOString();
+  ensureOcupacionalState();
+  state.ocupacional.firmasPublicadas = state.ocupacional.firmasPublicadas || {};
+  firmables.forEach(r => {
+    const m = occMedicoDeRegistro(r);
+    const clave = occFirmaClave(m);
+    if (!state.ocupacional.firmasPublicadas[clave]) state.ocupacional.firmasPublicadas[clave] = { firma:m.firma, sello:m.sello || '' };
+    r.firmaMedico = { medicoId:m.id, clave, nombre:m.nombre, colegiado:m.colegiado || '', firmadoPor:currentUser.username, firmadoEn:ahora, codigo:occCodigoFirma() };
+    r.medicoNombre = m.nombre; r.medicoColegiado = m.colegiado || '';
+    r.updatedAt = ahora;
+  });
+  await saveAppData({ backupToFolder:true });
+  await saveOccupationalStateToCloud(true);
+  showToast(firmables.length === 1 ? 'Dictamen firmado.' : `${firmables.length} dictámenes firmados.`);
+  if (currentPage === 'occRegistros') renderOcupRegistros(); else if (currentPage === 'occDashboard') renderOcupDashboard();
+}
+function firmarPendientesJornada(key) {
+  const ids = occData().registros.filter(r => occRegJornadaKey(r) === key && !r.firmaMedico).map(r => r.id);
+  firmarDictamenes(ids);
+}
+async function quitarFirmaDictamen(id) {
+  const r = occData().registros.find(x => String(x.id) === String(id));
+  if (!r || !r.firmaMedico) return;
+  if (!confirm(`¿Quitar la firma del dictamen de ${r.nombre}? Tendrá que volver a firmarlo.`)) return;
+  r.firmaMedico = null;
+  r.updatedAt = new Date().toISOString();
+  await saveAppData({ backupToFolder:true });
+  await saveOccupationalStateToCloud(true);
+  showToast('Firma quitada.');
+  renderOcupRegistros();
+}
+
+// Lista de dictámenes firmados (dashboard): todos los usuarios la ven y pueden imprimir.
+let occFirmadosBusca = '';
+function occFilasFirmados(records) {
+  const q = normalizeOccSearchText(occFirmadosBusca);
+  const lista = records.filter(r => r.firmaMedico && (!q || normalizeOccSearchText(r.nombre).includes(q)))
+    .sort((a, b) => String(b.fechaEvaluacion || '').localeCompare(String(a.fechaEvaluacion || '')) || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
+  if (!lista.length) return `<div class="listaVacia">${q ? 'No hay dictámenes firmados con ese nombre.' : 'Aún no hay dictámenes firmados en estos filtros.'}</div>`;
+  return `<div class="listaPlana">${lista.map(r => `<div class="filaSimple">
+    <span class="filaTexto"><strong>${escapeHtml(r.nombre || '')}</strong><span class="filaSub">${escapeHtml(r.planta || '')} · ${fmtF(r.fechaEvaluacion)} · ${escapeHtml(r.puesto || 'Sin puesto')} · Firmó ${escapeHtml(r.firmaMedico.nombre || '')}</span></span>
+    <span class="filaListaDer">
+      <span class="badge ${occAptClass(r.aptitudLaboral)}">${escapeHtml(r.aptitudLaboral || '—')}</span>
+      <button class="btn btn-sm btn-primary" onclick="imprimirDocumentoOcupacional('${r.id}','evaluacion')">📄 Dictamen</button>
+      ${r.consentimientoFirma ? `<button class="btn btn-sm btn-outline" onclick="imprimirDocumentoOcupacional('${r.id}','consentimiento')">✍️ Consentimiento</button>` : ''}
+    </span>
+  </div>`).join('')}</div>`;
+}
+function occBuscarFirmados(valor) {
+  occFirmadosBusca = valor || '';
+  const box = document.getElementById('occFirmadosLista');
+  if (box) box.innerHTML = occFilasFirmados(occDashRegistrosActuales || []);
+}
+let occDashRegistrosActuales = [];

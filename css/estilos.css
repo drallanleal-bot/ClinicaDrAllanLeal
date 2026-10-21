@@ -1026,3 +1026,5 @@ button.statBox:hover{border-color:var(--green-mid)}
 .medicoBotones{display:flex;gap:.4rem;flex-wrap:wrap;flex:1}
 .medicoBotones label.btn{cursor:pointer}
 .medicoCheck{display:flex;gap:.45rem;align-items:flex-start;font-size:13px;color:#4d5b55}
+.occJornadaFirma{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;padding:.55rem 1rem;background:#f1f6fb;border-bottom:1px solid var(--border);font-size:13px;color:#2b4b66}
+.occFirmaNota{font-size:12.5px;color:var(--green-dark);background:var(--green-light);border-radius:8px;padding:.45rem .65rem;margin:0 0 .65rem}
