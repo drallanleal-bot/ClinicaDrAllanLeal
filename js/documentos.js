@@ -509,21 +509,27 @@ function procesarImagenFirma(file, maxW, maxH) {
 }
 
 // ── Configuración (página Empresas) ──
+// Cada médico con usuario asignado solo lo puede ver completo y modificar ese mismo usuario:
+// los demás ven su nombre, pero no la imagen de la firma ni pueden cambiar nada de su ficha.
+function occEsDuenoMedico(m) { return !!(m && m.usuario && currentUser?.username === String(m.usuario).toLowerCase()); }
+function occMedicoBloqueado(m) { return !!(m && m.usuario && !occEsDuenoMedico(m)); }
+
 function renderOccMedicosConfig() {
   const medicos = ensureMedicos();
   const emp = activeOccCompany();
   const ejemplo = { planta:(emp?.plantas || [])[0] || 'MIXCO', fechaEvaluacion:todayLocalISO(), nombre:'Nombre del trabajador', expediente:'TRO-MIX-2026-0001' };
-  const conFirma = medicos.find(m => m.firma);
+  const conFirma = medicos.find(m => m.firma && occEsDuenoMedico(m));
+  const propio = medicos.find(occEsDuenoMedico);
   return `<div class="card" id="occMedicosCard">
   <div class="cardTitle">✍️ Médicos evaluadores y firma</div>
   <div class="listaPlana">
-    ${medicos.map(m => `<div class="medicoFila" data-id="${escapeHtml(m.id)}">
+    ${medicos.map(m => occEsDuenoMedico(m) || !occMedicoBloqueado(m) ? `<div class="medicoFila" data-id="${escapeHtml(m.id)}">
       <div class="fRow three">
         <div class="fGroup"><label>Nombre</label><input data-campo="nombre" value="${escapeHtml(m.nombre || '')}"></div>
         <div class="fGroup"><label>Colegiado No.</label><input data-campo="colegiado" value="${escapeHtml(m.colegiado || '')}" placeholder="Ej: 12,345"></div>
         <div class="fGroup"><label>Usuario de la app</label><input data-campo="usuario" value="${escapeHtml(m.usuario || '')}" placeholder="Vacío si firma a mano"></div>
       </div>
-      <div class="medicoFirmas">
+      ${occEsDuenoMedico(m) ? `<div class="medicoFirmas">
         <div class="medicoImg ancha">${m.firma ? `<img src="${m.firma}" alt="Firma y sello">` : '<span>Sin firma y sello digital</span>'}${m.sello ? `<img src="${m.sello}" alt="Sello">` : ''}</div>
         <div class="medicoBotones">
           <label class="btn btn-sm btn-outline">📷 ${m.firma ? 'Cambiar firma y sello' : 'Subir firma y sello'}<input type="file" accept="image/*" hidden onchange="subirImagenMedico('${escapeHtml(m.id)}','firma',this)"></label>
@@ -531,14 +537,23 @@ function renderOccMedicosConfig() {
           <button type="button" class="btn btn-sm btn-outline filaBorrar" onclick="quitarMedico('${escapeHtml(m.id)}')">Quitar médico</button>
         </div>
       </div>
-      <div class="attachHint">${m.firma ? `Solo el usuario «${escapeHtml(m.usuario || '—')}» puede firmar con esta firma, y siempre se le pide la contraseña.` : 'Sin firma digital: sus dictámenes salen con el espacio para firmar y sellar a mano.'}</div>
+      <div class="attachHint">${m.firma ? 'Su firma y sello solo se ven y se cambian desde su usuario; para firmar siempre se pide su contraseña.' : 'Sin firma digital: sus dictámenes salen con el espacio para firmar y sellar a mano.'}</div>` : `<div class="medicoFirmas">
+        <div class="medicoBotones"><button type="button" class="btn btn-sm btn-outline filaBorrar" onclick="quitarMedico('${escapeHtml(m.id)}')">Quitar médico</button></div>
+      </div>
+      <div class="attachHint">Firma a mano. Si el médico quiere firma digital, escriba aquí su usuario de la app y él la sube entrando con su propia cuenta.</div>`}
+    </div>` : `<div class="medicoFila medicoBloqueado" data-id="${escapeHtml(m.id)}" data-bloqueado="1">
+      <div class="medicoBloqueadoFila">
+        <span class="medicoCandado" aria-hidden="true">🔒</span>
+        <span class="filaTexto"><strong>${escapeHtml(m.nombre || '')}</strong><span class="filaSub">${m.colegiado ? `Colegiado ${escapeHtml(m.colegiado)} · ` : ''}${m.firma ? 'Firma digital' : 'Firma a mano'}</span></span>
+      </div>
+      <div class="attachHint">Solo ${escapeHtml(m.nombre || 'este médico')} puede ver o cambiar sus datos y su firma, entrando con su propio usuario.</div>
     </div>`).join('')}
   </div>
   <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.75rem 0 1.25rem">
     <button class="btn btn-outline" onclick="agregarMedico()">+ Agregar médico</button>
     <button class="btn btn-primary" onclick="guardarMedicosYLeyenda()">Guardar</button>
   </div>
-  <div class="attachHint" style="margin-bottom:1rem">Para la foto: ponga el sello y firme encima en una hoja blanca, con tinta oscura; tómela de frente y con buena luz. La app quita el fondo sola (aunque salga gris o café). La firma queda guardada en Firebase, solo visible para administradores.</div>
+  <div class="attachHint" style="margin-bottom:1rem">Para la foto: ponga el sello y firme encima en una hoja blanca, con tinta oscura; tómela de frente y con buena luz. La app quita el fondo sola (aunque salga gris o café). Cada médico ve y cambia solo su propia firma.</div>
   <div class="fRow" style="align-items:flex-start">
     <div class="fGroup">
       <label>Leyenda de protección (${escapeHtml(emp?.nombre || '')})</label>
@@ -548,7 +563,7 @@ function renderOccMedicosConfig() {
     </div>
     <div class="fGroup">
       <label>Vista previa en el dictamen</label>
-      <div class="docPreview" id="occLeyendaPreview">${docBloqueFirma(ejemplo, conFirma || medicos[0] || null, !!conFirma)}</div>
+      <div class="docPreview" id="occLeyendaPreview">${docBloqueFirma(ejemplo, conFirma || propio || (medicos[0] ? { nombre:medicos[0].nombre, colegiado:medicos[0].colegiado } : null), !!conFirma)}</div>
     </div>
   </div>
 </div>`;
@@ -566,7 +581,7 @@ function previewLeyendaFirma() {
 function leerMedicosDelFormulario() {
   document.querySelectorAll('#occMedicosCard .medicoFila').forEach(fila => {
     const m = occMedicoPorId(fila.dataset.id);
-    if (!m) return;
+    if (!m || occMedicoBloqueado(m)) return;
     fila.querySelectorAll('[data-campo]').forEach(el => {
       const campo = el.dataset.campo;
       m[campo] = el.type === 'checkbox' ? el.checked : (campo === 'usuario' ? el.value.trim().toLowerCase() : el.value.trim());
@@ -591,6 +606,7 @@ function agregarMedico() {
 async function quitarMedico(id) {
   const m = occMedicoPorId(id);
   if (!m) return;
+  if (occMedicoBloqueado(m)) { alert(`Solo ${m.nombre} puede quitarse de la lista desde su usuario.`); return; }
   if (!confirm(`¿Quitar a ${m.nombre || 'este médico'} de la lista? Las evaluaciones ya guardadas con este médico saldrán con el espacio en blanco.`)) return;
   leerMedicosDelFormulario();
   state.medicos = ensureMedicos().filter(x => String(x.id) !== String(id));
@@ -598,7 +614,9 @@ async function quitarMedico(id) {
 }
 async function quitarImagenesMedico(id) {
   const m = occMedicoPorId(id);
-  if (!m || !confirm('¿Quitar la firma y el sello digital de este médico?')) return;
+  if (!m) return;
+  if (!occEsDuenoMedico(m)) { alert('Solo el propio médico puede quitar su firma y sello.'); return; }
+  if (!confirm('¿Quitar su firma y sello digital?')) return;
   leerMedicosDelFormulario();
   m.firma = ''; m.sello = '';
   await guardarMedicosYLeyenda(false);
@@ -607,6 +625,7 @@ async function quitarImagenesMedico(id) {
 async function subirImagenMedico(id, tipo, input) {
   const file = input.files && input.files[0];
   if (!file) return;
+  if (!occEsDuenoMedico(occMedicoPorId(id))) { alert('Solo el propio médico puede subir o cambiar su firma y sello, entrando con su usuario.'); input.value = ''; return; }
   try {
     leerMedicosDelFormulario();
     // Firma y sello van en una sola imagen (como el sello de hule con la firma encima).
