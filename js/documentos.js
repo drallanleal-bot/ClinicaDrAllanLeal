@@ -257,7 +257,7 @@ function docFirmaMedico(r) {
   else if (r.medicoId && r.medicoId !== 'otro') datos = { nombre:m?.nombre || r.medicoNombre || '', colegiado:m?.colegiado || r.medicoColegiado || '' };
   if (datos && firmado) { datos.firma = pub.firma; datos.sello = pub.sello || ''; }
   return `<div class="docSeccion">FIRMA DEL MÉDICO EVALUADOR</div>
-    ${docBloqueFirma(r, datos, firmado)}
+    ${docBloqueFirma(r, datos, firmado, firmado && f.qr ? f.codigo : '')}
     ${firmado ? `<div class="docNota">${escapeHtml(occTextoFirmado(f))}</div>` : ''}`;
 }
 
@@ -313,9 +313,12 @@ function documentoConsentimientoHtml(r) {
   </div>`;
 }
 
-function imprimirDocumentoOcupacional(id, tipo) {
+async function imprimirDocumentoOcupacional(id, tipo) {
   const r = occData().registros.find(x => String(x.id) === String(id));
   if (!r) { alert('No se encontró el registro.'); return; }
+  if (tipo !== 'consentimiento' && r.firmaMedico && !r.firmaMedico.qr && isAdminUser()) {
+    if (await occPublicarVerificacion(r)) { saveAppData(); saveOccupationalStateToCloud(true); }
+  }
   if (tipo === 'consentimiento' && !r.consentimientoFirma && !confirm('Este trabajador todavía no ha firmado el consentimiento en pantalla. ¿Imprimirlo en blanco para firma a mano?')) return;
   let area = document.getElementById('printArea');
   if (!area) {
@@ -370,8 +373,12 @@ function occLeyendaLineas(r = {}, emp = activeOccCompany()) {
 }
 
 // Bloque que se imprime en el dictamen (también se usa para la vista previa).
-function docBloqueFirma(r, medico, aplicarDigital) {
-  return `<div class="docFirmaBloque">
+function docBloqueFirma(r, medico, aplicarDigital, codigoQr = '') {
+  const qr = codigoQr ? `<div class="docQr">
+      ${occQrSvg(occVerificacionUrl(codigoQr))}
+      <div class="docQrTexto">Verifique este dictamen escaneando el código.<br>Código: <b>${escapeHtml(codigoQr)}</b></div>
+    </div>` : '';
+  return `<div class="docFirmaFila"><div class="docFirmaBloque">
     <div class="docFirmaZona">
       <div class="docLeyenda">${occLeyendaLineas(r).map(l => `<div>${escapeHtml(l)}</div>`).join('')}</div>
       ${aplicarDigital && medico.sello ? `<img class="docSelloImg" src="${medico.sello}" alt="">` : ''}
@@ -380,7 +387,7 @@ function docBloqueFirma(r, medico, aplicarDigital) {
     <div class="docFirmaPie">Firma y sello</div>
     <div class="docLinea"><span>Nombre:</span><i>${medico ? escapeHtml(medico.nombre || '') : ''}</i></div>
     <div class="docLinea"><span>Colegiado No.:</span><i>${medico ? escapeHtml(medico.colegiado || '') : ''}</i></div>
-  </div>`;
+  </div>${qr}</div>`;
 }
 
 // Selector del médico en la sección "Aptitud laboral" del formulario.
@@ -660,9 +667,11 @@ async function firmarDictamenes(ids) {
     r.medicoNombre = m.nombre; r.medicoColegiado = m.colegiado || '';
     r.updatedAt = ahora;
   });
+  const publicados = await Promise.all(firmables.map(occPublicarVerificacion));
   await saveAppData({ backupToFolder:true });
   await saveOccupationalStateToCloud(true);
   showToast(firmables.length === 1 ? 'Dictamen firmado.' : `${firmables.length} dictámenes firmados.`);
+  if (publicados.some(ok => !ok)) alert(OCC_AVISO_QR);
   if (currentPage === 'occRegistros') renderOcupRegistros(); else if (currentPage === 'occDashboard') renderOcupDashboard();
 }
 function firmarPendientesJornada(key) {
@@ -673,6 +682,7 @@ async function quitarFirmaDictamen(id) {
   const r = occData().registros.find(x => String(x.id) === String(id));
   if (!r || !r.firmaMedico) return;
   if (!confirm(`¿Quitar la firma del dictamen de ${r.nombre}? Tendrá que volver a firmarlo.`)) return;
+  occAnularVerificacion(r.firmaMedico.codigo);
   r.firmaMedico = null;
   r.updatedAt = new Date().toISOString();
   await saveAppData({ backupToFolder:true });
@@ -703,3 +713,54 @@ function occBuscarFirmados(valor) {
   if (box) box.innerHTML = occFilasFirmados(occDashRegistrosActuales || []);
 }
 let occDashRegistrosActuales = [];
+
+// ── Código QR de verificación ──
+// Al firmar se publica en Firestore "verificaciones/{código}" un resumen mínimo del dictamen. Cualquiera que
+// tenga el papel escanea el QR y ve en verificar.html si es válido y con qué datos. Las reglas permiten leer
+// un código a la vez (no listar), y solo administradores pueden crear o anular.
+function occVerificacionUrl(codigo) {
+  const base = location.origin + location.pathname.replace(/[^/]*$/, '');
+  return `${base}verificar.html?c=${encodeURIComponent(codigo)}`;
+}
+function occQrSvg(texto, celda = 3) {
+  if (typeof qrcode !== 'function') return '';
+  const qr = qrcode(0, 'M');
+  qr.addData(texto);
+  qr.make();
+  return qr.createSvgTag({ cellSize:celda, margin:1, scalable:true });
+}
+function occDatosVerificacion(r) {
+  const f = r.firmaMedico || {};
+  const dpi = String(r.dpi || '').replace(/\D/g, '');
+  return {
+    estado:'valido',
+    empresa:occData().activeEmpresa || '',
+    planta:r.planta || '',
+    fechaEvaluacion:r.fechaEvaluacion || '',
+    trabajador:r.nombre || '',
+    expediente:r.expediente || '',
+    dpiFinal:dpi ? dpi.slice(-4) : '',
+    dictamen:occDictamenDeAptitud(r.aptitudLaboral).texto,
+    medico:f.nombre || '',
+    colegiado:f.colegiado || '',
+    firmadoEn:f.firmadoEn || '',
+    publicadoEn:new Date().toISOString()
+  };
+}
+async function occPublicarVerificacion(r) {
+  if (!r?.firmaMedico?.codigo || typeof db === 'undefined' || !db) return false;
+  try {
+    await db.collection('verificaciones').doc(r.firmaMedico.codigo).set(occDatosVerificacion(r));
+    r.firmaMedico.qr = true;
+    return true;
+  } catch (e) {
+    console.warn('No se pudo publicar la verificación', e);
+    return false;
+  }
+}
+function occAnularVerificacion(codigo) {
+  if (!codigo || typeof db === 'undefined' || !db) return;
+  db.collection('verificaciones').doc(codigo).set({ estado:'anulado', anuladoEn:new Date().toISOString() }, { merge:true })
+    .catch(e => console.warn('No se pudo anular la verificación', e));
+}
+const OCC_AVISO_QR = 'Los dictámenes quedaron firmados, pero el código QR todavía no se pudo activar en Firebase. Revise que las reglas de Firestore tengan la parte de "verificaciones" y vuelva a imprimir: la app lo intentará de nuevo.';
