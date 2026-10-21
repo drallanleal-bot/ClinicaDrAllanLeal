@@ -1033,3 +1033,10 @@ button.statBox:hover{border-color:var(--green-mid)}
 .docQr{width:118px;text-align:center;flex:0 0 auto}
 .docQr svg{width:104px;height:104px;display:block;margin:0 auto}
 .docQrTexto{font-size:8.5px;line-height:1.3;color:#444;margin-top:3px}
+.occJornadaFirmaBotones{display:flex;gap:.4rem;flex-wrap:wrap}
+.medicoImg.ancha{width:240px;height:96px;gap:4px}
+.medicoImg.ancha img{max-width:48%}
+.medicoImg.ancha img:only-child{max-width:95%}
+.docFirmaZona{height:132px}
+.docFirmaImg{transform:translate(-50%,-50%);max-width:92%;max-height:94%}
+.docSelloImg ~ .docFirmaImg{transform:translate(-62%,-50%);max-width:70%}

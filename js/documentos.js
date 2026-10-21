@@ -316,19 +316,39 @@ function documentoConsentimientoHtml(r) {
 async function imprimirDocumentoOcupacional(id, tipo) {
   const r = occData().registros.find(x => String(x.id) === String(id));
   if (!r) { alert('No se encontró el registro.'); return; }
-  if (tipo !== 'consentimiento' && r.firmaMedico && !r.firmaMedico.qr && isAdminUser()) {
-    if (await occPublicarVerificacion(r)) { saveAppData(); saveOccupationalStateToCloud(true); }
-  }
   if (tipo === 'consentimiento' && !r.consentimientoFirma && !confirm('Este trabajador todavía no ha firmado el consentimiento en pantalla. ¿Imprimirlo en blanco para firma a mano?')) return;
+  await imprimirRegistrosOcupacionales([r], tipo, `${tipo === 'consentimiento' ? 'Consentimiento' : 'Evaluacion'} ${r.nombre || ''} ${r.fechaEvaluacion || ''}`.trim());
+}
+
+// Imprime o guarda en un solo PDF todas las evaluaciones (o consentimientos) de una jornada.
+// Las firmadas salen con la firma digital; las demás con el recuadro para firmar y sellar a mano.
+async function imprimirJornadaOcupacional(key, tipo) {
+  const regs = occData().registros.filter(r => occRegJornadaKey(r) === key)
+    .sort((a, b) => String(a.expediente || '').localeCompare(String(b.expediente || ''), 'es', { numeric:true }) || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
+  if (!regs.length) { alert('No hay evaluaciones en esta jornada.'); return; }
+  const [fecha, planta] = key.split('|');
+  const nombre = tipo === 'consentimiento' ? 'Consentimientos' : 'Evaluaciones';
+  showToast(`Preparando ${regs.length} ${nombre.toLowerCase()}...`);
+  await imprimirRegistrosOcupacionales(regs, tipo, `${nombre} ${occData().activeEmpresa || ''} ${planta || ''} ${fecha || ''}`.replace(/\s+/g, ' ').trim());
+}
+
+async function imprimirRegistrosOcupacionales(regs, tipo, titulo) {
+  if (tipo !== 'consentimiento' && isAdminUser()) {
+    const pendientes = regs.filter(r => r.firmaMedico && !r.firmaMedico.qr);
+    if (pendientes.length) {
+      const ok = await Promise.all(pendientes.map(occPublicarVerificacion));
+      if (ok.some(Boolean)) { saveAppData(); saveOccupationalStateToCloud(true); }
+    }
+  }
   let area = document.getElementById('printArea');
   if (!area) {
     area = document.createElement('div');
     area.id = 'printArea';
     document.body.appendChild(area);
   }
-  area.innerHTML = tipo === 'consentimiento' ? documentoConsentimientoHtml(r) : documentoEvaluacionHtml(r);
+  area.innerHTML = regs.map(r => tipo === 'consentimiento' ? documentoConsentimientoHtml(r) : documentoEvaluacionHtml(r)).join('');
   const tituloPrevio = document.title;
-  document.title = `${tipo === 'consentimiento' ? 'Consentimiento' : 'Evaluacion'} ${r.nombre || ''} ${r.fechaEvaluacion || ''}`.trim();
+  document.title = titulo;
   const imagenes = Array.from(area.querySelectorAll('img'));
   Promise.all(imagenes.map(img => img.complete ? null : new Promise(res => { img.onload = img.onerror = res; }))).then(() => {
     // El área de impresión solo se ve al imprimir (ver @media print en estilos.css).
@@ -417,20 +437,56 @@ function procesarImagenFirma(file, maxW, maxH) {
       c.width = Math.max(1, Math.round(img.width * escala));
       c.height = Math.max(1, Math.round(img.height * escala));
       const ctx = c.getContext('2d');
+      // Fondo blanco primero: una imagen con fondo transparente no debe leerse como tinta negra.
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
       ctx.drawImage(img, 0, 0, c.width, c.height);
       const data = ctx.getImageData(0, 0, c.width, c.height);
       const px = data.data;
-      // Fondo claro = transparente; tinta = un solo color (el promedio de la tinta), para que pese poco.
+      // Se calcula el brillo del papel zona por zona: así una esquina gris, una sombra o un fondo café
+      // no quedan como mancha. Lo que es más oscuro que el papel de alrededor es tinta.
+      const W = c.width, H = c.height, B = 24;
+      const lum = new Float32Array(W * H);
+      for (let i = 0, p = 0; i < px.length; i += 4, p++) lum[p] = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+      const gw = Math.ceil(W / B), gh = Math.ceil(H / B);
+      let grid = new Float32Array(gw * gh);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const k = Math.floor(y / B) * gw + Math.floor(x / B);
+        if (lum[y * W + x] > grid[k]) grid[k] = lum[y * W + x];
+      }
+      for (let pasada = 0; pasada < 2; pasada++) {
+        const sig = new Float32Array(gw * gh);
+        for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
+          let s = 0;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const yy = Math.min(gh - 1, Math.max(0, gy + dy)), xx = Math.min(gw - 1, Math.max(0, gx + dx));
+            s += grid[yy * gw + xx];
+          }
+          sig[gy * gw + gx] = s / 9;
+        }
+        grid = sig;
+      }
+      const fondo = (x, y) => {
+        const fx = Math.min(gw - 1, Math.max(0, (x + 0.5) / B - 0.5)), fy = Math.min(gh - 1, Math.max(0, (y + 0.5) / B - 0.5));
+        const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = Math.min(gw - 1, x0 + 1), y1 = Math.min(gh - 1, y0 + 1);
+        const tx = fx - x0, ty = fy - y0;
+        const arriba = grid[y0 * gw + x0] * (1 - tx) + grid[y0 * gw + x1] * tx;
+        const abajo = grid[y1 * gw + x0] * (1 - tx) + grid[y1 * gw + x1] * tx;
+        return arriba * (1 - ty) + abajo * ty;
+      };
       let sr = 0, sg = 0, sb = 0, n = 0;
-      const alfa = new Uint8ClampedArray(c.width * c.height);
-      for (let i = 0, p = 0; i < px.length; i += 4, p++) {
-        const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-        const a = Math.max(0, Math.min(255, Math.round((205 - lum) * 255 / 95)));
+      const alfa = new Uint8ClampedArray(W * H);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const p = y * W + x, i = p * 4;
+        const d = fondo(x, y) - lum[p];
+        // 16 niveles de transparencia: se ve igual y la imagen pesa mucho menos.
+        const a = d <= 20 ? 0 : Math.min(255, Math.round(Math.pow(Math.min(1, (d - 20) / 50), 0.8) * 15) * 17);
         alfa[p] = a;
-        if (a > 160) { sr += px[i]; sg += px[i + 1]; sb += px[i + 2]; n++; }
+        if (a > 200) { sr += px[i]; sg += px[i + 1]; sb += px[i + 2]; n++; }
       }
       if (!n) { reject(new Error('No se encontró la firma en la foto. Use papel blanco y tinta oscura.')); return; }
-      const r = Math.round(sr / n), g = Math.round(sg / n), b = Math.round(sb / n);
+      // Color de la tinta: el promedio, oscurecido para que se imprima nítido.
+      const r = Math.round(sr / n * 0.6), g = Math.round(sg / n * 0.6), b = Math.round(sb / n * 0.6);
       let minX = c.width, minY = c.height, maxX = -1, maxY = -1;
       for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
         if (alfa[y * c.width + x] > 40) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
@@ -468,11 +524,9 @@ function renderOccMedicosConfig() {
         <div class="fGroup"><label>Usuario de la app</label><input data-campo="usuario" value="${escapeHtml(m.usuario || '')}" placeholder="Vacío si firma a mano"></div>
       </div>
       <div class="medicoFirmas">
-        <div class="medicoImg">${m.firma ? `<img src="${m.firma}" alt="Firma">` : '<span>Sin firma digital</span>'}</div>
-        <div class="medicoImg">${m.sello ? `<img src="${m.sello}" alt="Sello">` : '<span>Sin sello digital</span>'}</div>
+        <div class="medicoImg ancha">${m.firma ? `<img src="${m.firma}" alt="Firma y sello">` : '<span>Sin firma y sello digital</span>'}${m.sello ? `<img src="${m.sello}" alt="Sello">` : ''}</div>
         <div class="medicoBotones">
-          <label class="btn btn-sm btn-outline">📷 ${m.firma ? 'Cambiar firma' : 'Subir firma'}<input type="file" accept="image/*" hidden onchange="subirImagenMedico('${escapeHtml(m.id)}','firma',this)"></label>
-          <label class="btn btn-sm btn-outline">🔵 ${m.sello ? 'Cambiar sello' : 'Subir sello (opcional)'}<input type="file" accept="image/*" hidden onchange="subirImagenMedico('${escapeHtml(m.id)}','sello',this)"></label>
+          <label class="btn btn-sm btn-outline">📷 ${m.firma ? 'Cambiar firma y sello' : 'Subir firma y sello'}<input type="file" accept="image/*" hidden onchange="subirImagenMedico('${escapeHtml(m.id)}','firma',this)"></label>
           ${m.firma || m.sello ? `<button type="button" class="btn btn-sm btn-outline" onclick="quitarImagenesMedico('${escapeHtml(m.id)}')">Quitar firma y sello</button>` : ''}
           <button type="button" class="btn btn-sm btn-outline filaBorrar" onclick="quitarMedico('${escapeHtml(m.id)}')">Quitar médico</button>
         </div>
@@ -484,7 +538,7 @@ function renderOccMedicosConfig() {
     <button class="btn btn-outline" onclick="agregarMedico()">+ Agregar médico</button>
     <button class="btn btn-primary" onclick="guardarMedicosYLeyenda()">Guardar</button>
   </div>
-  <div class="attachHint" style="margin-bottom:1rem">Para la foto: firme en papel blanco con tinta oscura, tome la foto de frente y con buena luz. La app quita el fondo sola. La firma queda guardada en Firebase, solo visible para administradores.</div>
+  <div class="attachHint" style="margin-bottom:1rem">Para la foto: ponga el sello y firme encima en una hoja blanca, con tinta oscura; tómela de frente y con buena luz. La app quita el fondo sola (aunque salga gris o café). La firma queda guardada en Firebase, solo visible para administradores.</div>
   <div class="fRow" style="align-items:flex-start">
     <div class="fGroup">
       <label>Leyenda de protección (${escapeHtml(emp?.nombre || '')})</label>
@@ -555,13 +609,15 @@ async function subirImagenMedico(id, tipo, input) {
   if (!file) return;
   try {
     leerMedicosDelFormulario();
-    const dataUrl = tipo === 'sello' ? await procesarImagenFirma(file, 320, 320) : await procesarImagenFirma(file, 520, 200);
+    // Firma y sello van en una sola imagen (como el sello de hule con la firma encima).
+    const dataUrl = await procesarImagenFirma(file, 480, 260);
     const m = occMedicoPorId(id);
     if (!m) return;
-    m[tipo] = dataUrl;
+    m.firma = dataUrl;
+    m.sello = '';
     m.firmaVersion = String(Date.now());
     await guardarMedicosYLeyenda(false);
-    showToast(tipo === 'sello' ? 'Sello guardado.' : 'Firma guardada.');
+    showToast('Firma y sello guardados.');
   } catch (e) {
     alert(e.message || 'No se pudo procesar la imagen.');
   }
@@ -661,12 +717,16 @@ async function firmarDictamenes(ids) {
   state.ocupacional.firmasPublicadas = state.ocupacional.firmasPublicadas || {};
   firmables.forEach(r => {
     const m = occMedicoDeRegistro(r);
+    if (!m) return;
     const clave = occFirmaClave(m);
     if (!state.ocupacional.firmasPublicadas[clave]) state.ocupacional.firmasPublicadas[clave] = { firma:m.firma, sello:m.sello || '' };
     r.firmaMedico = { medicoId:m.id, clave, nombre:m.nombre, colegiado:m.colegiado || '', firmadoPor:currentUser.username, firmadoEn:ahora, codigo:occCodigoFirma() };
     r.medicoNombre = m.nombre; r.medicoColegiado = m.colegiado || '';
     r.updatedAt = ahora;
   });
+  // Quita copias de firmas que ya ningún dictamen usa (por ejemplo, si cambió la foto de la firma).
+  const enUso = new Set(occData().registros.map(r => r.firmaMedico?.clave).filter(Boolean));
+  Object.keys(state.ocupacional.firmasPublicadas).forEach(k => { if (!enUso.has(k)) delete state.ocupacional.firmasPublicadas[k]; });
   const publicados = await Promise.all(firmables.map(occPublicarVerificacion));
   await saveAppData({ backupToFolder:true });
   await saveOccupationalStateToCloud(true);
