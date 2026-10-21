@@ -1381,7 +1381,8 @@ async function borrarOcupacionalRegistro(id) {
   const index = records.findIndex(r => String(r.id) === String(id));
   const registro = records[index];
   if (!registro) return;
-  if (!confirm(`¿Desea borrar el registro EMOP de ${registro.nombre} del ${fmtF(registro.fechaEvaluacion)}?`)) return;
+  if (!confirm(`¿Desea borrar el registro EMOP de ${registro.nombre} del ${fmtF(registro.fechaEvaluacion)}?${registro.firmaMedico ? ' El dictamen está firmado: su código QR quedará anulado.' : ''}`)) return;
+  if (registro.firmaMedico) occAnularVerificacion(registro.firmaMedico.codigo);
   records.splice(index, 1);
   if (String(editingOcupRegistroId) === String(id)) editingOcupRegistroId = null;
   normalizeStateCounters();
