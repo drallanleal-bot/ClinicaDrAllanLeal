@@ -1056,7 +1056,11 @@ function occRegBarraFirma(g) {
   const firmables = g.registros.filter(r => !r.firmaMedico && occPuedeFirmar(occMedicoDeRegistro(r))).length;
   return `<div class="occJornadaFirma">
     <span>✍️ ${firmados} de ${g.registros.length} ${g.registros.length === 1 ? 'dictamen firmado' : 'dictámenes firmados'}</span>
-    ${firmables ? `<button class="btn btn-sm btn-blue" data-key="${escapeHtml(g.key)}" onclick="firmarPendientesJornada(this.dataset.key)">Firmar ${firmables} pendiente${firmables === 1 ? '' : 's'}</button>` : ''}
+    <span class="occJornadaFirmaBotones">
+      <button class="btn btn-sm btn-outline" data-key="${escapeHtml(g.key)}" onclick="imprimirJornadaOcupacional(this.dataset.key,'evaluacion')" title="Imprimir o guardar en un PDF todas las evaluaciones de esta jornada">🖨️ Evaluaciones (${g.registros.length})</button>
+      <button class="btn btn-sm btn-outline" data-key="${escapeHtml(g.key)}" onclick="imprimirJornadaOcupacional(this.dataset.key,'consentimiento')" title="Imprimir o guardar en un PDF todos los consentimientos de esta jornada">🖨️ Consentimientos</button>
+      ${firmables ? `<button class="btn btn-sm btn-blue" data-key="${escapeHtml(g.key)}" onclick="firmarPendientesJornada(this.dataset.key)">✍️ Firmar ${firmables} pendiente${firmables === 1 ? '' : 's'}</button>` : ''}
+    </span>
   </div>`;
 }
 function renderOccRegLista(records, allRecords, nombreFilter) {
