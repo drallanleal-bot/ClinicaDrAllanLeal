@@ -7,6 +7,7 @@ const pageTitles = {
 };
 function goTo(page) {
   if (isOcupViewer() && page === 'occRegistros') page = 'occDashboard';
+  if (isSoloOcupacional() && (!String(page).startsWith('occ') || page === 'occPlanes')) page = 'occDashboard';
   currentPage = page;
   document.querySelectorAll('.navBtn').forEach(b => b.classList.remove('active'));
   const nav = document.getElementById('nav-' + page);

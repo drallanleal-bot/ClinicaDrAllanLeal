@@ -370,8 +370,19 @@ const OCC_LEYENDA_PREDETERMINADA = [
   'No válido para otro fin'
 ].join('\n');
 
+// Los usuarios de jornada no leen el estado compartido (donde están las firmas): usan la lista pública
+// de médicos (solo nombre, colegiado y si tiene firma digital) que se guarda en los datos ocupacionales.
+function occListaPublicaMedicos() {
+  return ensureMedicos().map(m => ({ id:m.id, nombre:m.nombre || '', colegiado:m.colegiado || '', usuario:m.usuario || '', tieneFirma:!!m.firma }));
+}
+function occActualizarListaPublicaMedicos() {
+  if (!isAdminUser() || !Array.isArray(state.medicos)) return;
+  ensureOcupacionalState();
+  state.ocupacional.medicosLista = occListaPublicaMedicos();
+}
 function ensureMedicos() {
   if (!Array.isArray(state.medicos)) {
+    if (!isAdminUser()) return Array.isArray(state.ocupacional?.medicosLista) ? state.ocupacional.medicosLista : [];
     state.medicos = [
       { id:'drleal', nombre:'Dr. Allan Leal', colegiado:'', usuario:'drleal', firma:'', sello:'' }
     ];
@@ -412,12 +423,14 @@ function docBloqueFirma(r, medico, aplicarDigital, codigoQr = '') {
 
 // Selector del médico en la sección "Aptitud laboral" del formulario.
 function renderOccMedicoSelect(editing) {
+  occActualizarListaPublicaMedicos();
   const medicos = ensureMedicos();
   const propio = medicos.find(m => m.usuario && m.usuario === currentUser?.username);
-  const elegido = editing ? (editing.medicoId || 'otro') : (occRegUltimos.medicoId ?? (propio?.id || medicos[0]?.id || 'otro'));
+  const porDefecto = isJornadaUser() ? 'otro' : (propio?.id || medicos[0]?.id || 'otro');
+  const elegido = editing ? (editing.medicoId || 'otro') : (occRegUltimos.medicoId ?? porDefecto);
   return `<div class="fGroup"><label>Médico evaluador (firma)</label>
     <select id="occMedico">
-      ${medicos.map(m => `<option value="${escapeHtml(m.id)}" ${String(m.id) === String(elegido) ? 'selected' : ''}>${escapeHtml(m.nombre)}${m.colegiado ? ` · Col. ${escapeHtml(m.colegiado)}` : ''}${m.firma ? ' · firma digital' : ' · firma a mano'}</option>`).join('')}
+      ${medicos.map(m => `<option value="${escapeHtml(m.id)}" ${String(m.id) === String(elegido) ? 'selected' : ''}>${escapeHtml(m.nombre)}${m.colegiado ? ` · Col. ${escapeHtml(m.colegiado)}` : ''}${m.firma || m.tieneFirma ? ' · firma digital' : ' · firma a mano'}</option>`).join('')}
       <option value="otro" ${elegido === 'otro' ? 'selected' : ''}>Otro médico (llenar y firmar a mano)</option>
     </select>
     <div class="attachHint">Después de guardar, el médico con firma digital firma desde el listado con «✍️ Firmar» y su contraseña. Sin firmar, el dictamen sale con el espacio para firmar y sellar en papel.</div>
@@ -592,6 +605,7 @@ function leerMedicosDelFormulario() {
 }
 async function guardarMedicosYLeyenda(aviso = true) {
   leerMedicosDelFormulario();
+  occActualizarListaPublicaMedicos();
   await saveAppData({ backupToFolder:true });
   await saveOccupationalStateToCloud(true);
   if (aviso) showToast('Médicos y leyenda guardados.');

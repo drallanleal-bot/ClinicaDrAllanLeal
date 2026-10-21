@@ -2,7 +2,9 @@
 const LOGIN_ACCOUNTS = {
   drleal:     { email:'drleal@clinica.local', name:"Dr. Allan Leal", role:'admin', initials:'DR' },
   michi:      { email:'michi@clinica.local', name:'MICHI', role:'admin', initials:'MI' },
-  ingsalanic: { email:'ingsalanic@clinica.local', name:'Ingeniería Salanic', role:'ingeniero', initials:'IS' }
+  ingsalanic: { email:'ingsalanic@clinica.local', name:'Ingeniería Salanic', role:'ingeniero', initials:'IS' },
+  enfermeria: { email:'enfermeria@clinica.local', name:'Enfermería', role:'jornada', initials:'EN' },
+  medico:     { email:'medico@clinica.local', name:'Médico de jornada', role:'jornada', initials:'MD' }
 };
 let currentUser = null;
 

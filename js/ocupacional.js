@@ -749,7 +749,7 @@ function renderOcupEmpresas() {
   setC(`
 ${occHeader('Salud Ocupacional', 'Seleccione TROPIGAS o cree nuevas empresas con el mismo estilo de control.')}
 <div class="occCompanyGrid">${cards}</div>
-${isOcupViewer() ? '' : `<div class="card">
+${isSoloOcupacional() ? '' : `<div class="card">
   <div class="cardTitle">Carpeta OneDrive de ${escapeHtml(occData().activeEmpresa)}</div>
   <div class="fGroup">
     <label>Enlace compartido de carpeta</label>
@@ -761,8 +761,8 @@ ${isOcupViewer() ? '' : `<div class="card">
     <button class="btn btn-outline" onclick="openOccupationalScansFolder()">Probar carpeta</button>
   </div>
 </div>`}
-${isOcupViewer() ? '' : renderOccMedicosConfig()}
-${isOcupViewer() ? '' : `<div class="card">
+${isSoloOcupacional() ? '' : renderOccMedicosConfig()}
+${isSoloOcupacional() ? '' : `<div class="card">
   <div class="cardTitle">Nueva empresa</div>
   <div class="fRow">
     <div class="fGroup"><label>Nombre de empresa</label><input id="newEmpresaNombre" placeholder="Ej: NUEVA EMPRESA"></div>
@@ -1036,6 +1036,7 @@ function renderOccRegFila(r) {
         <div><span>IMC</span>${escapeHtml(r.imc || '—')}</div>
         <div><span>Ruffier</span>${occRegRuffierTexto(r)}</div>
         <div><span>Doping</span>${escapeHtml(r.dopingResultado || 'Pendiente')}${sustancias}</div>
+        ${r.creadoPor || r.modificadoPor ? `<div><span>Registró / modificó</span>${escapeHtml(r.creadoPor || '—')}${r.modificadoPor && r.modificadoPor !== r.creadoPor ? ` / ${escapeHtml(r.modificadoPor)}` : ''}</div>` : ''}
       </div>
       ${dopingPositivo ? `<div style="margin:.2rem 0 .6rem">${dopingPhotoPreview(r.dopingFotos)}</div>` : ''}
       ${r.firmaMedico ? `<div class="occFirmaNota">✅ ${escapeHtml(occTextoFirmado(r.firmaMedico))}</div>` : ''}
@@ -1310,6 +1311,8 @@ async function guardarOcupacionalRegistro() {
     : [];
   const nowIso = new Date().toISOString();
   const formRegistro = {
+    creadoPor:isEdit ? (records[editIndex].creadoPor || '') : (currentUser?.username || ''),
+    modificadoPor:currentUser?.username || '',
     id, expediente, planta, fechaEvaluacion:fecha, nombre,
     dpi:document.getElementById('occDpi').value.trim(),
     puesto:document.getElementById('occPuesto').value.trim(),

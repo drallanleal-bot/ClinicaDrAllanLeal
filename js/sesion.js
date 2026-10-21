@@ -1,5 +1,5 @@
 function cargarPacientes() {
-  if (isOcupViewer()) return;
+  if (isSoloOcupacional()) return;
   startRealtimeSync();
   startPatientCollectionSync();
   syncLocalPatientsToCloud();
@@ -17,8 +17,20 @@ let editingOcupScanId = null;
 let pendingCloudRefresh = false;
 let pendingCloudRefreshTimer = null;
 
+// Roles: admin (DRLEAL: todo), asistente (MICHI: clínica propia y ocupacional, sin firmar),
+// jornada (enfermería y médico de jornada: solo Salud Ocupacional, pueden registrar EMOP),
+// ingeniero (solo ver dashboard, escáneres y plantas).
 function isAdminUser() {
-  return currentUser && currentUser.role === 'admin';
+  return !!currentUser && (currentUser.role === 'admin' || currentUser.role === 'asistente');
+}
+function isJornadaUser() {
+  return !!currentUser && currentUser.role === 'jornada';
+}
+function isSoloOcupacional() {
+  return isOcupViewer() || isJornadaUser();
+}
+function puedeEscribirOcupacional() {
+  return isAdminUser() || isJornadaUser();
 }
 
 function isOcupViewer() {
@@ -28,7 +40,7 @@ function isOcupViewer() {
 function renderModuleSwitch() {
   const el = document.getElementById('moduleSwitch');
   if (!el) return;
-  if (isOcupViewer()) {
+  if (isSoloOcupacional()) {
     el.innerHTML = `<button class="moduleBtn active" type="button">Salud Ocupacional</button>`;
     return;
   }
@@ -49,9 +61,9 @@ function renderSidebar() {
       ${isOcupViewer() ? '' : `<button class="navBtn" onclick="goTo('occRegistros')" id="nav-occRegistros"><span class="navIcon">🩺</span><span class="navLabel">Registros EMOP</span></button>`}
       <button class="navBtn" onclick="goTo('occEscaneres')" id="nav-occEscaneres"><span class="navIcon">📁</span><span class="navLabel">Escáneres</span></button>
       <button class="navBtn" onclick="goTo('occPlantas')" id="nav-occPlantas"><span class="navIcon">🏭</span><span class="navLabel">Plantas</span></button>
-      ${isOcupViewer() ? '' : `<button class="navBtn" onclick="goTo('occPlanes')" id="nav-occPlanes"><span class="navIcon">📄</span><span class="navLabel">Planes SSO</span></button>`}
+      ${isSoloOcupacional() ? '' : `<button class="navBtn" onclick="goTo('occPlanes')" id="nav-occPlanes"><span class="navIcon">📄</span><span class="navLabel">Planes SSO</span></button>`}
       <div class="sidebar-footer">
-        ${isOcupViewer() ? '' : `<button class="navBtn" onclick="switchModule('clinica')"><span class="navIcon">🏥</span><span class="navLabel">Clínica Propia</span></button>`}
+        ${isSoloOcupacional() ? '' : `<button class="navBtn" onclick="switchModule('clinica')"><span class="navIcon">🏥</span><span class="navLabel">Clínica Propia</span></button>`}
         <button class="navBtn" onclick="doLogout()"><span class="navIcon">🚪</span><span class="navLabel">Cerrar sesión</span></button>
       </div>`;
     return;
@@ -78,7 +90,7 @@ function ponerNombresMenu() {
 }
 
 function switchModule(module, page) {
-  if (isOcupViewer()) module = 'ocupacional';
+  if (isSoloOcupacional()) module = 'ocupacional';
   currentModule = module;
   document.body.classList.toggle('occ-tropigas', module === 'ocupacional' && occData().activeEmpresa === 'TROPIGAS');
   renderModuleSwitch();
@@ -87,9 +99,11 @@ function switchModule(module, page) {
 }
 
 function initializeUserSession() {
+  // Lo recordado de la evaluación anterior (planta, fecha, médico) no pasa de un usuario a otro.
+  if (typeof occRegUltimos !== 'undefined') { occRegUltimos.planta = ''; occRegUltimos.fecha = ''; delete occRegUltimos.medicoId; }
   document.getElementById('topAvatar').textContent = currentUser.initials;
   document.getElementById('topName').textContent = currentUser.name;
-  switchModule(isOcupViewer() ? 'ocupacional' : 'clinica', isOcupViewer() ? 'occDashboard' : 'dashboard');
+  switchModule(isSoloOcupacional() ? 'ocupacional' : 'clinica', isOcupViewer() ? 'occDashboard' : (isJornadaUser() ? 'occRegistros' : 'dashboard'));
   cargarPacientes();
   startOccupationalRealtimeSync();
   resetTimer();

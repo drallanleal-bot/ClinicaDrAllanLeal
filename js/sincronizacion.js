@@ -535,13 +535,13 @@ function importOccupationalRecordsFile(input) {
 }
 
 function queueOccupationalCloudSave() {
-  if (isApplyingOcupCloudState || !currentUser || !isAdminUser()) return;
+  if (isApplyingOcupCloudState || !currentUser || !puedeEscribirOcupacional()) return;
   clearTimeout(occCloudSaveTimer);
   occCloudSaveTimer = setTimeout(() => saveOccupationalStateToCloud(false), 350);
 }
 
 async function saveOccupationalStateToCloud(force = false) {
-  if (isApplyingOcupCloudState || !currentUser || !isAdminUser()) return false;
+  if (isApplyingOcupCloudState || !currentUser || !puedeEscribirOcupacional()) return false;
   // Firebase es la única fuente de los registros: nunca se sube antes de haber leído la nube, para no borrarla con un equipo vacío.
   if (!occCloudLoaded) return false;
   try {
@@ -586,8 +586,8 @@ async function saveOccupationalStateToCloud(force = false) {
 }
 
 async function forceOccupationalCloudSync() {
-  if (!currentUser || !isAdminUser()) {
-    alert('Solo DRLEAL o MICHI pueden subir la data ocupacional completa a Firebase.');
+  if (!currentUser || !puedeEscribirOcupacional()) {
+    alert('Este usuario solo puede ver la información; no puede subir datos a Firebase.');
     return;
   }
   ensureOcupacionalState();
@@ -631,7 +631,7 @@ async function applyOccupationalCloudState(data) {
   occCloudStatus = { state:'ok', message:`Datos recibidos de Firebase${updated ? ' el ' + updated : ''}. Registros en nube: ${counts.registros}.` };
   localStorage.setItem(APP_STORAGE_KEY, JSON.stringify(backupPayload()));
   isApplyingOcupCloudState = false;
-  if (isAdminUser() && beforeDedupeJson !== lastOccCloudStateJson) saveOccupationalStateToCloud(true);
+  if (puedeEscribirOcupacional() && beforeDedupeJson !== lastOccCloudStateJson) saveOccupationalStateToCloud(true);
   if (currentUser && String(currentPage || '').startsWith('occ')) refreshCurrentViewAfterCloudSync();
 }
 
