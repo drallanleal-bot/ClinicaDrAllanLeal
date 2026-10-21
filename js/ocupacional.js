@@ -1340,7 +1340,7 @@ async function guardarOcupacionalRegistro() {
     ? await uploadOcupDopingFotos(formRegistro, previousDopingFotos)
     : [];
   const registro = aplicarFirmaBorrada(isEdit ? mergeOcupRegistro(baseRegistro, formRegistro, true) : formRegistro);
-  if (registro.firmaMedico) registro.firmaMedico = null;
+  if (registro.firmaMedico) { occAnularVerificacion(registro.firmaMedico.codigo); registro.firmaMedico = null; }
   if (isEdit) records[editIndex] = registro;
   else {
     records.push(registro);

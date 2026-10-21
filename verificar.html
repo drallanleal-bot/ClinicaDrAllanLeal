@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Verificar dictamen · Clínica Dr. Allan Leal</title>
+<link rel="icon" type="image/png" href="icons/icono-192.png">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--verde:#176345;--verde-claro:#eaf6f0;--rojo:#a32d2d;--rojo-claro:#fdecec;--ambar:#8a5a00;--ambar-claro:#fff6e0;--tinta:#18231f;--gris:#6c7974;--borde:rgba(24,35,31,.12)}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'DM Sans',Arial,sans-serif;background:#eef4f1;color:var(--tinta);min-height:100vh;display:flex;justify-content:center;padding:24px 16px}
+  main{width:100%;max-width:520px}
+  .cabeza{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .cabeza img{width:52px;height:52px;object-fit:contain;border-radius:10px;background:#fff}
+  h1{font-size:19px;margin:0}
+  .sub{font-size:13px;color:var(--gris);margin-top:2px}
+  .tarjeta{background:#fff;border:1px solid var(--borde);border-radius:12px;padding:18px;box-shadow:0 10px 30px rgba(16,31,47,.06)}
+  form{display:flex;gap:8px}
+  input{flex:1;min-width:0;font:inherit;font-size:17px;letter-spacing:.12em;text-transform:uppercase;padding:11px 12px;border:1.5px solid var(--borde);border-radius:8px}
+  button{font:inherit;font-weight:700;padding:11px 16px;border:0;border-radius:8px;background:var(--verde);color:#fff;cursor:pointer}
+  .estado{margin-top:16px;padding:14px;border-radius:10px;font-weight:700;font-size:16px}
+  .valido{background:var(--verde-claro);color:var(--verde)}
+  .anulado{background:var(--rojo-claro);color:var(--rojo)}
+  .aviso{background:var(--ambar-claro);color:var(--ambar)}
+  .estado small{display:block;font-weight:400;font-size:13px;margin-top:4px}
+  dl{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin:16px 0 0;font-size:14.5px}
+  dt{color:var(--gris)}
+  dd{margin:0;font-weight:500}
+  .pie{font-size:12px;color:var(--gris);margin-top:16px;line-height:1.5}
+</style>
+</head>
+<body>
+<main>
+  <div class="cabeza">
+    <img src="ALLAN-logo (1).jpeg" alt="">
+    <div><h1>Verificación de dictamen</h1><div class="sub">Evaluación médica ocupacional · Clínica Dr. Allan Leal</div></div>
+  </div>
+  <div class="tarjeta">
+    <form id="form">
+      <input id="codigo" placeholder="Código del dictamen" autocomplete="off" aria-label="Código del dictamen" maxlength="12">
+      <button type="submit">Verificar</button>
+    </form>
+    <div id="resultado"></div>
+    <div class="pie">Compare estos datos con el documento impreso. Si no coinciden, o el dictamen aparece anulado, el documento no es válido.</div>
+  </div>
+</main>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js?v=20261026"></script>
+<script>
+  function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
+  function fecha(iso) { if (!iso) return '—'; const [y, m, d] = String(iso).slice(0, 10).split('-'); return d && m && y ? `${d}/${m}/${y}` : '—'; }
+  function fechaHora(iso) { const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleString('es-GT', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
+  const resultado = document.getElementById('resultado');
+  const input = document.getElementById('codigo');
+  async function verificar(codigo) {
+    codigo = String(codigo || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!codigo) { resultado.innerHTML = '<div class="estado aviso">Escriba el código que aparece debajo del QR.</div>'; return; }
+    resultado.innerHTML = '<div class="estado aviso">Verificando…</div>';
+    try {
+      const snap = await db.collection('verificaciones').doc(codigo).get();
+      if (!snap.exists) { resultado.innerHTML = `<div class="estado anulado">❌ No existe un dictamen firmado con el código ${esc(codigo)}<small>Revise que el código esté bien escrito.</small></div>`; return; }
+      const v = snap.data() || {};
+      const anulado = v.estado !== 'valido';
+      resultado.innerHTML = `
+        <div class="estado ${anulado ? 'anulado' : 'valido'}">${anulado ? '⚠️ Dictamen anulado' : '✅ Dictamen válido, firmado digitalmente'}
+          <small>${anulado ? `La firma fue retirada${v.anuladoEn ? ' (' + esc(fechaHora(v.anuladoEn)) + ')' : ''}. Pida el documento actualizado.` : 'Código ' + esc(codigo)}</small></div>
+        <dl>
+          <dt>Trabajador</dt><dd>${esc(v.trabajador || '—')}</dd>
+          <dt>DPI</dt><dd>${v.dpiFinal ? 'terminado en ' + esc(v.dpiFinal) : '—'}</dd>
+          <dt>Expediente</dt><dd>${esc(v.expediente || '—')}</dd>
+          <dt>Empresa</dt><dd>${esc([v.empresa, v.planta].filter(Boolean).join(' · ') || '—')}</dd>
+          <dt>Evaluación</dt><dd>${esc(fecha(v.fechaEvaluacion))}</dd>
+          <dt>Dictamen</dt><dd>${esc(v.dictamen || '—')}</dd>
+          <dt>Médico</dt><dd>${esc(v.medico || '—')}${v.colegiado ? ' · Col. ' + esc(v.colegiado) : ''}</dd>
+          <dt>Firmado</dt><dd>${esc(fechaHora(v.firmadoEn))}</dd>
+        </dl>`;
+    } catch (e) {
+      resultado.innerHTML = '<div class="estado aviso">No se pudo consultar en este momento.<small>Revise su conexión a internet e intente de nuevo.</small></div>';
+    }
+  }
+  document.getElementById('form').addEventListener('submit', e => { e.preventDefault(); verificar(input.value); });
+  const inicial = new URLSearchParams(location.search).get('c');
+  if (inicial) { input.value = inicial; verificar(inicial); }
+</script>
+</body>
+</html>
