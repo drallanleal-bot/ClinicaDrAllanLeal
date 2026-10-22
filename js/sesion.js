@@ -64,6 +64,7 @@ function renderSidebar() {
       ${isSoloOcupacional() ? '' : `<button class="navBtn" onclick="goTo('occPlanes')" id="nav-occPlanes"><span class="navIcon">📄</span><span class="navLabel">Planes SSO</span></button>`}
       <div class="sidebar-footer">
         ${isSoloOcupacional() ? '' : `<button class="navBtn" onclick="switchModule('clinica')"><span class="navIcon">🏥</span><span class="navLabel">Clínica Propia</span></button>`}
+        <button class="navBtn" onclick="abrirCambioContrasena()"><span class="navIcon">🔑</span><span class="navLabel">Cambiar contraseña</span></button>
         <button class="navBtn" onclick="doLogout()"><span class="navIcon">🚪</span><span class="navLabel">Cerrar sesión</span></button>
       </div>`;
     return;
@@ -77,7 +78,8 @@ function renderSidebar() {
     <button class="navBtn" id="nav-respaldos" onclick="goTo('respaldos')"><span class="navIcon">💾</span><span class="navLabel">Respaldos</span></button>
     <div class="sidebar-footer">
       <button class="navBtn" onclick="switchModule('ocupacional')"><span class="navIcon">🏭</span><span class="navLabel">Salud Ocupacional</span></button>
-      <button class="navBtn" onclick="doLogout()"><span class="navIcon">🚪</span><span class="navLabel">Cerrar sesión</span></button>
+      <button class="navBtn" onclick="abrirCambioContrasena()"><span class="navIcon">🔑</span><span class="navLabel">Cambiar contraseña</span></button>
+        <button class="navBtn" onclick="doLogout()"><span class="navIcon">🚪</span><span class="navLabel">Cerrar sesión</span></button>
     </div>`;
 }
 
@@ -279,3 +281,61 @@ function resetTimer() {
 ['click','mousemove','keydown','scroll','touchstart'].forEach(event => {
   document.addEventListener(event, resetTimer);
 });
+
+// ── Cambiar la propia contraseña ──
+// Los usuarios tienen correos internos (@clinica.local) que no reciben mensajes, así que cada quien
+// cambia su contraseña desde aquí: se confirma la actual con Firebase y luego se guarda la nueva.
+function abrirCambioContrasena() {
+  let modal = document.getElementById('modalContrasena');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'overlay';
+    modal.id = 'modalContrasena';
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `<div class="modal" style="max-width:420px">
+    <div class="modalHead"><h3>🔑 Cambiar contraseña</h3></div>
+    <p style="font-size:13.5px;color:#4d5b55;margin:.25rem 0 1rem">Usuario: <b>${escapeHtml(currentUser?.username || '')}</b>. Use al menos 8 caracteres, con letras y números, y que no sea la misma de otro usuario.</p>
+    <div class="fGroup"><label>Contraseña actual</label><input type="password" id="pwdActual" autocomplete="current-password"></div>
+    <div class="fGroup" style="margin-top:.6rem"><label>Contraseña nueva</label><input type="password" id="pwdNueva" autocomplete="new-password"></div>
+    <div class="fGroup" style="margin-top:.6rem"><label>Repita la contraseña nueva</label><input type="password" id="pwdNueva2" autocomplete="new-password"></div>
+    <div id="pwdError" style="color:var(--red);font-size:13px;min-height:18px;margin-top:.45rem"></div>
+    <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:.75rem">
+      <button class="btn btn-outline" id="pwdCancelar">Cancelar</button>
+      <button class="btn btn-primary" id="pwdGuardar">Guardar contraseña</button>
+    </div>
+  </div>`;
+  const $ = id => modal.querySelector('#' + id);
+  const error = $('pwdError');
+  const boton = $('pwdGuardar');
+  const cerrar = () => modal.classList.remove('show');
+  $('pwdCancelar').onclick = cerrar;
+  modal.querySelectorAll('input').forEach(i => i.addEventListener('input', () => { error.textContent = ''; }));
+  boton.onclick = async () => {
+    const actual = $('pwdActual').value, nueva = $('pwdNueva').value, nueva2 = $('pwdNueva2').value;
+    if (!actual) { error.textContent = 'Escriba su contraseña actual.'; return; }
+    if (nueva.length < 8 || !/[a-zA-Z]/.test(nueva) || !/\d/.test(nueva)) { error.textContent = 'La nueva debe tener al menos 8 caracteres, con letras y números.'; return; }
+    if (nueva !== nueva2) { error.textContent = 'Las dos contraseñas nuevas no coinciden.'; return; }
+    if (nueva === actual) { error.textContent = 'La nueva contraseña debe ser distinta de la actual.'; return; }
+    boton.disabled = true; boton.textContent = 'Guardando...';
+    try {
+      const usuario = auth && auth.currentUser;
+      if (!usuario || !usuario.email) throw { code:'sin-sesion' };
+      await usuario.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(usuario.email, actual));
+      await usuario.updatePassword(nueva);
+      cerrar();
+      showToast('Contraseña cambiada. Úsela la próxima vez que inicie sesión.');
+    } catch (e) {
+      boton.disabled = false; boton.textContent = 'Guardar contraseña';
+      const c = e && e.code ? e.code : '';
+      error.textContent = c === 'sin-sesion' ? 'No hay sesión activa. Vuelva a iniciar sesión.'
+        : (c.includes('wrong-password') || c.includes('invalid-credential') || c.includes('invalid-login')) ? 'La contraseña actual no es correcta.'
+        : c.includes('weak-password') ? 'Firebase considera esa contraseña muy débil. Use una más larga.'
+        : c.includes('too-many') ? 'Demasiados intentos. Espere unos minutos.'
+        : c.includes('network') ? 'Sin conexión. Revise el internet e intente de nuevo.'
+        : 'No se pudo cambiar la contraseña. Intente de nuevo.';
+    }
+  };
+  modal.classList.add('show');
+  setTimeout(() => $('pwdActual').focus(), 50);
+}
