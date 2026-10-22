@@ -82,7 +82,15 @@ async function connectOneDriveFolder() {
     return;
   }
   try {
-    oneDriveDirHandle = await window.showDirectoryPicker({ mode:'readwrite' });
+    const elegida = await window.showDirectoryPicker({ mode:'readwrite' });
+    const nombre = nombreCarpetaNormalizado(elegida.name);
+    // Carpetas que crea la app adentro: elegirlas haría que los respaldos queden mezclados o repetidos.
+    if (['PACIENTES', 'DOPING', 'PLANES SSO'].includes(nombre) || /^BACKUP \d{4}$/.test(nombre)) {
+      alert(`La carpeta «${elegida.name}» la crea la app por dentro. Elija la carpeta principal donde quiere los respaldos (la que contiene «CLINICA PROPIA» y «SALUD OCUPACIONAL»).`);
+      return;
+    }
+    if (CARPETAS_DE_MODULO.includes(nombre) && !confirm(`Eligió la carpeta «${elegida.name}». La app guardará ahí el respaldo de ${nombre === 'CLINICA PROPIA' ? 'la clínica propia' : 'Salud Ocupacional'} directamente, sin crear otra carpeta adentro.\n\nLo recomendado es elegir la carpeta de arriba, la que contiene «CLINICA PROPIA» y «SALUD OCUPACIONAL». ¿Usar «${elegida.name}» de todos modos?`)) return;
+    oneDriveDirHandle = elegida;
     if (!await hasWritePermission(oneDriveDirHandle, true)) {
       alert('No se otorgó permiso para escribir en la carpeta seleccionada.');
       return;
@@ -103,7 +111,7 @@ async function writeOneDriveBackup(showAlert = true) {
     await writable.close();
     await writeReadableClinicalBackup(false);
     await writeReadableOccupationalBackup(false);
-    if (showAlert) showToast('Respaldo guardado en la carpeta seleccionada. Incluye el archivo técnico JSON, carpetas legibles por paciente y backups anuales de Salud Ocupacional.');
+    if (showAlert) showToast(`Respaldo guardado en «${oneDriveDirHandle.name}». Cada vez se reemplazan los mismos archivos con la versión más reciente.`);
     return true;
   } catch (e) {
     console.warn('No se pudo escribir el respaldo.', e);
@@ -125,6 +133,16 @@ async function getOrCreateSubdir(parentHandle, name) {
   return parentHandle.getDirectoryHandle(safePathName(name), { create:true });
 }
 
+// Carpeta de cada módulo dentro de la carpeta conectada. Si la carpeta conectada YA es la del módulo
+// (por ejemplo se eligió «CLINICA PROPIA»), se usa esa misma: así nunca se crea
+// CLINICA PROPIA dentro de CLINICA PROPIA dentro de CLINICA PROPIA...
+const CARPETAS_DE_MODULO = ['CLINICA PROPIA', 'SALUD OCUPACIONAL'];
+function nombreCarpetaNormalizado(nombre) { return safePathName(nombre).toUpperCase(); }
+async function carpetaDelModulo(modulo) {
+  if (nombreCarpetaNormalizado(oneDriveDirHandle.name) === nombreCarpetaNormalizado(modulo)) return oneDriveDirHandle;
+  return getOrCreateSubdir(oneDriveDirHandle, modulo);
+}
+
 async function writeFileToHandle(directoryHandle, file, outputName) {
   const fileHandle = await directoryHandle.getFileHandle(safePathName(outputName || file.name), { create:true });
   const writable = await fileHandle.createWritable();
@@ -142,7 +160,7 @@ async function writeTextToHandle(directoryHandle, fileName, text, type = 'text/h
 async function writeHistoriaAttachmentToOneDrive(historia, paciente, file, outputName) {
   if (!oneDriveDirHandle) return false;
   try {
-    const root = await getOrCreateSubdir(oneDriveDirHandle, 'CLINICA PROPIA');
+    const root = await carpetaDelModulo('CLINICA PROPIA');
     const pacientesDir = await getOrCreateSubdir(root, 'PACIENTES');
     const pacDir = await getOrCreateSubdir(pacientesDir, `${patientCode(paciente)} - ${paciente.nombre || 'Paciente'}`);
     const historiasDir = await getOrCreateSubdir(pacDir, 'HISTORIAS CLINICAS');
@@ -159,7 +177,7 @@ async function writeHistoriaAttachmentToOneDrive(historia, paciente, file, outpu
 async function writeOccupationalScanToOneDrive(scan, file) {
   if (!oneDriveDirHandle) return false;
   try {
-    const root = await getOrCreateSubdir(oneDriveDirHandle, 'SALUD OCUPACIONAL');
+    const root = await carpetaDelModulo('SALUD OCUPACIONAL');
     const empresa = await getOrCreateSubdir(root, occData().activeEmpresa || 'TROPIGAS');
     const planta = await getOrCreateSubdir(empresa, scan.planta);
     const fecha = await getOrCreateSubdir(planta, scan.fecha || 'SIN FECHA');
@@ -175,7 +193,7 @@ async function writeOccupationalScanToOneDrive(scan, file) {
 async function writeOcupDopingPhotoToOneDrive(registro, file, outputName) {
   if (!oneDriveDirHandle) return false;
   try {
-    const root = await getOrCreateSubdir(oneDriveDirHandle, 'SALUD OCUPACIONAL');
+    const root = await carpetaDelModulo('SALUD OCUPACIONAL');
     const empresa = await getOrCreateSubdir(root, occData().activeEmpresa || 'TROPIGAS');
     const doping = await getOrCreateSubdir(empresa, 'DOPING');
     const planta = await getOrCreateSubdir(doping, registro.planta || 'SIN PLANTA');
@@ -192,7 +210,7 @@ async function writeOcupDopingPhotoToOneDrive(registro, file, outputName) {
 async function writePlanSSOToOneDrive(plan, file) {
   if (!oneDriveDirHandle) return false;
   try {
-    const root = await getOrCreateSubdir(oneDriveDirHandle, 'SALUD OCUPACIONAL');
+    const root = await carpetaDelModulo('SALUD OCUPACIONAL');
     const planes = await getOrCreateSubdir(root, 'PLANES DE SSO');
     const empresa = await getOrCreateSubdir(planes, plan.empresa || 'GENERAL');
     await writeFileToHandle(empresa, file, plan.nombreArchivo);
@@ -262,7 +280,7 @@ async function writeReadableClinicalBackup(showAlert = false) {
     return false;
   }
   try {
-    const root = await getOrCreateSubdir(oneDriveDirHandle, 'CLINICA PROPIA');
+    const root = await carpetaDelModulo('CLINICA PROPIA');
     const pacientesDir = await getOrCreateSubdir(root, 'PACIENTES');
     const indexRows = [];
     for (const p of state.pacientes) {
@@ -300,7 +318,7 @@ async function writeReadableOccupationalBackup(showAlert = false) {
   }
   try {
     ensureOcupacionalState();
-    const root = await getOrCreateSubdir(oneDriveDirHandle, 'SALUD OCUPACIONAL');
+    const root = await carpetaDelModulo('SALUD OCUPACIONAL');
     const headers = ['Fecha','Planta','Expediente','Nombre','DPI','Puesto','Área','Edad','PA','FC','FR','TEMP','SpO2','GMT','Peso kg','Altura','IMC','Aptitud','Ruffier','Diagnósticos','Tratamiento','Archivo fuente'];
     for (const emp of state.ocupacional.empresas || []) {
       const empresaDir = await getOrCreateSubdir(root, emp.nombre || 'EMPRESA');

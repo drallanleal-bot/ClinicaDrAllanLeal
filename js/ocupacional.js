@@ -1733,8 +1733,9 @@ function renderRespaldos() {
       Importar respaldo
       <input type="file" accept="application/json,.json" onchange="importBackup(this)" style="display:none">
     </label>
-    <button class="btn btn-outline" onclick="connectOneDriveFolder()">Conectar carpeta local</button>
+    <button class="btn btn-outline" onclick="connectOneDriveFolder()">${oneDriveDirHandle ? 'Cambiar carpeta conectada' : 'Conectar carpeta local'}</button>
   </div>
+  <div class="occFirmaNota" style="margin-top:.85rem">${oneDriveDirHandle ? `📂 Carpeta conectada en esta computadora: <b>${escapeHtml(oneDriveDirHandle.name)}</b>. Adentro se guardan «CLINICA PROPIA» y «SALUD OCUPACIONAL»; cada respaldo reemplaza los mismos archivos con la versión más reciente.` : '📂 Aún no hay carpeta conectada en esta computadora.'}</div>
   <div style="font-size:12px;color:#888;line-height:1.6;margin-top:1rem">
     Nota: si selecciona una carpeta dentro de OneDrive en Windows, la app escribira automaticamente el archivo clinica-dr-allan-leal-respaldo.json y OneDrive lo sincronizara. El enlace web solo abre la carpeta en linea; escribir directamente a ese link requiere una integracion avanzada con Microsoft Graph.
   </div>
