@@ -1051,9 +1051,10 @@ html,body{overflow-x:clip;max-width:100%}
 .sidebar{display:none !important}
 .layout{display:block;min-height:0}
 .main{max-width:1180px;margin:0 auto;padding:18px 20px 40px;overflow:visible;background:transparent !important;min-width:0}
-.topbar{position:sticky;top:0;z-index:100;display:flex !important;flex-wrap:nowrap !important;align-items:center;gap:12px;background:#0d4330 !important;color:#fff;padding:10px 20px;padding-top:max(10px, env(safe-area-inset-top));box-shadow:0 6px 18px rgba(13,67,48,.22)}
+.topbar{position:sticky;top:0;z-index:100;display:flex !important;flex-wrap:nowrap !important;align-items:center;gap:12px;background:linear-gradient(90deg,var(--green-dark),var(--blue)) !important;color:#fff;padding:10px 20px;padding-top:max(10px, env(safe-area-inset-top));box-shadow:0 6px 18px rgba(13,67,48,.22)}
 .barraCasa{flex:0 0 auto;width:46px;height:46px;min-height:46px;border:0;border-radius:10px;background:rgba(255,255,255,.14);color:#fff;font-size:22px;line-height:1;display:grid;place-items:center;cursor:pointer}
 .barraCasa:hover{background:rgba(255,255,255,.24)}
+.barraLogo{flex:0 0 auto;width:40px;height:40px;object-fit:contain;border-radius:8px;background:#fff;padding:2px}
 .barraTitulo{flex:1;min-width:0;display:grid;line-height:1.2}
 .barraTitulo strong{font-size:17px;letter-spacing:.3px}
 .barraTitulo span{font-size:13px;color:#b9d4c8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
