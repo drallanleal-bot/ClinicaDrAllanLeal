@@ -600,8 +600,9 @@ function isPilot(row) {
 // ── Encabezado de Salud Ocupacional: un botón principal y el resto en "⚙️ Más" ──
 function occHeader(title, subtitle) {
   const mostrarRegistro = !isOcupViewer() && currentPage !== 'occRegistros';
+  // El título grande lo pone la cabecera de la página (cabeceraPagina); aquí queda la descripción y las acciones.
   return `<div class="occHeader">
-    <div><div class="occTitle">${title}</div><div class="occSubtitle">${subtitle}</div></div>
+    <div><div class="occSubtitle">${subtitle}</div></div>
     <div class="occHeaderAcciones">
       ${mostrarRegistro ? `<button class="btn btn-primary" onclick="occRegAbrir('nueva')">+ Registro EMOP</button>` : ''}
       <details class="menuMas">
@@ -938,7 +939,7 @@ function occRegAbrir(vista) {
   occRegPasosVistos = new Set();
   if (currentPage !== 'occRegistros') goTo('occRegistros');
   else renderOcupRegistros();
-  document.querySelector('.main')?.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function occRegValor(id) { return String(document.getElementById(id)?.value || '').trim(); }
@@ -1375,7 +1376,7 @@ function editarOcupacionalRegistro(id) {
   occRegPaso = 1;
   occRegPasosVistos = new Set();
   renderOcupRegistros();
-  document.querySelector('.main')?.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function cancelarEdicionOcupacionalRegistro() {
   editingOcupRegistroId = null;
@@ -1472,10 +1473,6 @@ function renderOcupEscaneres() {
 </div>`;
   setC(`
 ${occHeader('Escáneres - Aptitudes y consentimientos', 'Índice de archivos firmados por planta y fecha.')}
-${isOcupViewer() ? '' : `<div class="tilesGrandes">
-  ${tileGrande('⬆️', isEdit ? 'Editando escáner' : 'Subir escáneres', 'PDF o imagen de la jornada', "occScanCambiarVista('subir')", vista === 'subir')}
-  ${tileGrande('📁', 'Ver archivos', `${todos.length} escáneres por jornada`, "editingOcupScanId=null;occScanCambiarVista('ver')", vista === 'ver')}
-</div>`}
 ${vista === 'subir' ? formulario : listado}`);
 }
 const occScanFiltros = { planta:'TODAS', fecha:'' };
@@ -1658,10 +1655,6 @@ function renderPlanesSSO() {
 </div>`;
   setC(`
 ${occHeader('Planes de SSO', 'Archivo y respaldo de planes de salud y seguridad ocupacional firmados.')}
-<div class="tilesGrandes">
-  ${tileGrande('⬆️', 'Subir plan', 'Plan firmado', "planesCambiarVista('subir')", planesVista === 'subir')}
-  ${tileGrande('📄', 'Planes guardados', `${planes.length} ${planes.length === 1 ? 'plan' : 'planes'}`, "planesCambiarVista('lista')", planesVista === 'lista')}
-</div>
 ${planesVista === 'subir' ? formulario : listado}`);
 }
 async function guardarPlanesSSO() {
