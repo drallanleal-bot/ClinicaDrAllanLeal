@@ -731,7 +731,11 @@ function refreshCurrentViewAfterCloudSync() {
     scheduleDeferredCloudRefresh();
     return;
   }
-  if (currentPage === 'dashboard') renderDashboard();
+  if (currentPage === 'inicio') renderInicio();
+  else if (currentPage === 'modClinica') renderModuloClinica();
+  else if (currentPage === 'modOcupacional') renderModuloOcupacional();
+  else if (currentPage === 'occArchivos') renderArchivosOcupacional();
+  else if (currentPage === 'dashboard') renderDashboard();
   else if (currentPage === 'pacientes') renderPacientes();
   else if (currentPage === 'historias') renderHistorias();
   else if (currentPage === 'agenda') renderAgenda();

@@ -97,7 +97,7 @@ function switchModule(module, page) {
   document.body.classList.toggle('occ-tropigas', module === 'ocupacional' && occData().activeEmpresa === 'TROPIGAS');
   renderModuleSwitch();
   renderSidebar();
-  goTo(page || (module === 'ocupacional' ? 'occEmpresas' : 'dashboard'));
+  goTo(page || (module === 'ocupacional' ? 'modOcupacional' : 'modClinica'));
 }
 
 function initializeUserSession() {
@@ -105,7 +105,7 @@ function initializeUserSession() {
   if (typeof occRegUltimos !== 'undefined') { occRegUltimos.planta = ''; occRegUltimos.fecha = ''; delete occRegUltimos.medicoId; }
   document.getElementById('topAvatar').textContent = currentUser.initials;
   document.getElementById('topName').textContent = currentUser.name;
-  switchModule(isSoloOcupacional() ? 'ocupacional' : 'clinica', isOcupViewer() ? 'occDashboard' : (isJornadaUser() ? 'occRegistros' : 'dashboard'));
+  goTo(paginaInicioUsuario());
   cargarPacientes();
   startOccupationalRealtimeSync();
   resetTimer();

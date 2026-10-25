@@ -6,15 +6,19 @@ const pageTitles = {
   occEmpresas:'Empresas', occDashboard:'Dashboard Ocupacional', occRegistros:'Registros EMOP', occEscaneres:'Escáneres', occPlantas:'Plantas', occPlanes:'Planes de SSO'
 };
 function goTo(page) {
+  if (page === 'inicio' && isSoloOcupacional()) page = 'modOcupacional';
   if (isOcupViewer() && page === 'occRegistros') page = 'occDashboard';
-  if (isSoloOcupacional() && (!String(page).startsWith('occ') || page === 'occPlanes')) page = 'occDashboard';
+  if (isSoloOcupacional() && page === 'occPlanes') page = 'occArchivos';
+  if (isSoloOcupacional() && !(String(page).startsWith('occ') || page === 'modOcupacional')) page = 'modOcupacional';
+  const cambiaPagina = currentPage !== page;
   currentPage = page;
-  document.querySelectorAll('.navBtn').forEach(b => b.classList.remove('active'));
-  const nav = document.getElementById('nav-' + page);
-  if (nav) nav.classList.add('active');
-  document.getElementById('pageTitle').textContent = pageTitles[page] || page;
-  const renders = { dashboard:renderDashboard, pacientes:renderPacientes, historias:renderHistorias, agenda:renderAgenda, recordatorios:renderRecordatorios, respaldos:renderRespaldos, occEmpresas:renderOcupEmpresas, occDashboard:renderOcupDashboard, occRegistros:renderOcupRegistros, occEscaneres:renderOcupEscaneres, occPlantas:renderOcupPlantas, occPlanes:renderPlanesSSO };
+  const modulo = moduloDePagina(page);
+  if (modulo) currentModule = modulo;
+  document.body.classList.toggle('occ-tropigas', modulo === 'ocupacional' && occData().activeEmpresa === 'TROPIGAS');
+  actualizarBarraSuperior();
+  const renders = { inicio:renderInicio, modClinica:renderModuloClinica, modOcupacional:renderModuloOcupacional, occArchivos:renderArchivosOcupacional, dashboard:renderDashboard, pacientes:renderPacientes, historias:renderHistorias, agenda:renderAgenda, recordatorios:renderRecordatorios, respaldos:renderRespaldos, occEmpresas:renderOcupEmpresas, occDashboard:renderOcupDashboard, occRegistros:renderOcupRegistros, occEscaneres:renderOcupEscaneres, occPlantas:renderOcupPlantas, occPlanes:renderPlanesSSO };
   if (renders[page]) renders[page]();
+  if (cambiaPagina) window.scrollTo({ top:0 });
 }
 
 // ── HELPERS ───────────────────────────────────────
@@ -26,7 +30,7 @@ function closeModal(id) {
   document.getElementById(id).classList.remove('show');
   setTimeout(flushDeferredCloudRefresh, 80);
 }
-function setC(html)     { document.getElementById('mainContent').innerHTML = html; }
+function setC(html)     { document.getElementById('mainContent').innerHTML = cabeceraPagina() + html; }
 function initials(n)    { return n.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
 function citaBadgeClass(estado) {
   if (estado === 'confirmada') return 'badge-green';
@@ -39,6 +43,7 @@ function refreshClinicPage(fallback = 'dashboard') {
   else if (currentPage === 'historias') renderHistorias();
   else if (currentPage === 'agenda') renderAgenda();
   else if (currentPage === 'recordatorios') renderRecordatorios();
+  else if (['inicio', 'modClinica', 'modOcupacional', 'occArchivos'].includes(currentPage)) goTo(currentPage);
   else goTo(fallback);
 }
 

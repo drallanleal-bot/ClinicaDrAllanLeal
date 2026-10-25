@@ -1042,3 +1042,98 @@ button.statBox:hover{border-color:var(--green-mid)}
 .docSelloImg ~ .docFirmaImg{transform:translate(-62%,-50%);max-width:70%}
 .medicoBloqueadoFila{display:flex;align-items:center;gap:.7rem}
 .medicoCandado{font-size:20px}
+/* ==========================================================================
+   Diseño tipo app (mismo estilo que SISO): barra superior fija en todos los
+   tamaños, inicio con los módulos y secciones como botones grandes.
+   ========================================================================== */
+/* "clip" evita el desplazamiento de lado sin romper la barra fija (hidden la rompía). */
+html,body{overflow-x:clip;max-width:100%}
+.sidebar{display:none !important}
+.layout{display:block;min-height:0}
+.main{max-width:1180px;margin:0 auto;padding:18px 20px 40px;overflow:visible;background:transparent !important;min-width:0}
+.topbar{position:sticky;top:0;z-index:100;display:flex !important;flex-wrap:nowrap !important;align-items:center;gap:12px;background:linear-gradient(90deg,var(--green-dark),var(--blue)) !important;color:#fff;padding:10px 20px;padding-top:max(10px, env(safe-area-inset-top));box-shadow:0 6px 18px rgba(13,67,48,.22)}
+.barraCasa{flex:0 0 auto;width:46px;height:46px;min-height:46px;border:0;border-radius:10px;background:rgba(255,255,255,.14);color:#fff;font-size:22px;line-height:1;display:grid;place-items:center;cursor:pointer}
+.barraCasa:hover{background:rgba(255,255,255,.24)}
+.barraLogo{flex:0 0 auto;width:40px;height:40px;object-fit:contain;border-radius:8px;background:#fff;padding:2px}
+.barraTitulo{flex:1;min-width:0;display:grid;line-height:1.2}
+.barraTitulo strong{font-size:17px;letter-spacing:.3px}
+.barraTitulo span{font-size:13px;color:#b9d4c8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar #pageTitle{display:block !important}
+.searchRow .btn{justify-content:center}
+.topbar .topRight{flex:0 0 auto;display:flex;align-items:center;gap:10px}
+.topbar .topName{display:none}
+.topbar .btnOut{min-height:44px;padding:0 16px;font-size:14px;border-radius:10px;background:rgba(255,255,255,.14);border:0}
+.topbar .btnOut:hover{background:rgba(255,255,255,.24)}
+/* Encabezado de cada página */
+.moduloHead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:2px 0 16px}
+.moduloHead h1{margin:0;font-size:24px;line-height:1.2;color:#0d4330;font-weight:700;min-width:0}
+.moduloEmpresa{font-size:13px;font-weight:600;color:#9a3412;background:#fff1e6;border-radius:999px;padding:3px 10px;vertical-align:middle;margin-left:4px}
+.btnSecciones{min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--border);background:#fff;color:#0d4330;font:inherit;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btnSecciones:hover{background:#eaf6f0}
+.occHeader{justify-content:flex-end;align-items:center;margin-bottom:.85rem}
+.occHeader > div:first-child{flex:1;min-width:0}
+.occHeader .occTitle{display:none}
+/* Inicio */
+.inicioHero{display:grid;justify-items:center;text-align:center;gap:4px;padding:14px 8px 6px}
+.inicioLogo{width:120px;height:120px;object-fit:contain;border-radius:22px;background:#fff;padding:8px;box-shadow:var(--shadow);margin-bottom:10px}
+.inicioHero h1{margin:0;font-size:clamp(24px,4vw,30px);line-height:1.15;color:var(--ink)}
+.inicioSub{margin:2px 0 0;color:var(--muted);font-size:16px}
+.inicioModulos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;max-width:860px;margin:22px auto 0}
+.tileModulo,.seccionBtn{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:8px;text-align:center;font:inherit;color:var(--ink);background:#fff;border:1px solid var(--border);border-top:5px solid var(--acento);border-radius:16px;box-shadow:var(--shadow);cursor:pointer;transition:transform .15s ease, box-shadow .15s ease;min-width:0}
+.tileModulo:hover,.tileModulo:focus-visible,.seccionBtn:hover,.seccionBtn:focus-visible{transform:translateY(-3px);box-shadow:0 18px 40px rgba(13,67,48,.16);outline:none}
+.tileModulo:active,.seccionBtn:active{transform:scale(.98)}
+.tileModulo{min-height:250px;padding:28px 18px 22px;border-top-width:6px}
+.tileModuloIcono,.seccionIcono{display:grid;place-items:center;border-radius:50%;background:var(--acento);line-height:1;box-shadow:0 8px 18px color-mix(in srgb, var(--acento) 35%, transparent)}
+.tileModuloIcono{width:92px;height:92px;font-size:46px;margin-bottom:6px}
+.tileModulo strong{font-size:22px;line-height:1.2}
+.tileModuloTexto,.seccionTexto{color:var(--muted);font-size:13.5px;line-height:1.4}
+.tileModuloDato,.seccionDato{margin-top:auto;padding:5px 12px;border-radius:999px;background:color-mix(in srgb, var(--acento) 12%, white);color:var(--acento);font-size:12.5px;font-weight:700}
+/* Secciones de cada módulo */
+.seccionesGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.seccionBtn{min-height:196px;padding:22px 14px 18px}
+.seccionIcono{width:68px;height:68px;font-size:32px;margin-bottom:4px}
+.seccionBtn b{font-size:17px;line-height:1.25}
+/* Buscadores grandes */
+.searchRow input{min-height:54px;font-size:17px;border-radius:12px;padding:0 16px}
+.searchRow .btn{min-height:54px}
+/* Tablas: se deslizan dentro de su recuadro */
+.card{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+/* Botones cómodos para el dedo */
+@media (pointer:coarse), (max-width:1024px){
+  .btn,.btn-sm,.btnOut,.btnSecciones,.menuMasLista button{min-height:44px}
+  .topbar .syncPill{min-height:44px;min-width:44px;justify-content:center}
+  .calNav button{width:44px;height:44px;min-height:44px}
+  .fGroup input,.fGroup select,.searchRow input,.occRegBuscar input{min-height:44px}
+}
+/* Tablet / iPad */
+@media (max-width:1050px){
+  .main{padding:16px 14px 32px}
+  .seccionesGrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:760px){
+  .topbar{padding-left:12px;padding-right:12px;gap:10px}
+  .topbar .avatar{display:none}
+  .topbar .syncPill .syncText{display:none}
+  .card table:not(.condTabla){min-width:560px}
+  .moduloHead h1{font-size:21px}
+  .occHeader{flex-direction:row;flex-wrap:wrap}
+}
+/* Celular */
+@media (max-width:640px){
+  .main{padding:12px 12px 28px}
+  .inicioLogo{width:96px;height:96px}
+  .inicioModulos,.seccionesGrid{gap:12px}
+  .tileModulo{min-height:200px;padding:20px 10px 16px}
+  .tileModuloIcono{width:72px;height:72px;font-size:36px}
+  .tileModulo strong{font-size:17px}
+  .tileModuloTexto{display:none}
+  .seccionBtn{min-height:160px;padding:16px 8px 14px}
+  .seccionIcono{width:56px;height:56px;font-size:27px}
+  .seccionBtn b{font-size:15px}
+  .seccionTexto{display:none}
+  .seccionesGrid > .seccionBtn:last-child:nth-child(odd){grid-column:1 / -1}
+  .barraTitulo strong{font-size:16px}
+}
+.calGrid{grid-template-columns:repeat(7,minmax(0,1fr)) !important}
+.calDay,.calHead{min-width:0}
+@media (max-width:640px){.calDay .ev{font-size:8.5px;padding:1px 2px}.calHead{font-size:10px}}
