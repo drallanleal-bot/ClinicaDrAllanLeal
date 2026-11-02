@@ -73,6 +73,7 @@ function renderInicio() {
   const citasHoy = state.citas.filter(c => c.fecha === hoy && c.estado !== 'cancelada').length;
   const regs = occData().registros || [];
   const firmados = regs.filter(r => r.firmaMedico).length;
+  const porEnviar = isSoloOcupacional() ? 0 : contarAvisosPorEnviar();
   setC(`
 <section class="inicioHero">
   <img class="inicioLogo" src="ALLAN-logo (1).jpeg" alt="Clínica Dr. Allan Leal">
@@ -85,6 +86,7 @@ function renderInicio() {
     <strong>Clínica propia</strong>
     <span class="tileModuloTexto">Pacientes, historias clínicas, agenda, recordatorios y respaldos</span>
     <span class="tileModuloDato">${plural(state.pacientes.length, 'paciente', 'pacientes')} · ${plural(citasHoy, 'cita hoy', 'citas hoy')}</span>
+    ${porEnviar ? `<span class="tileAviso">🔔 ${plural(porEnviar, 'recordatorio por enviar', 'recordatorios por enviar')}</span>` : ''}
   </button>
   <button type="button" class="tileModulo" style="--acento:#ea580c" onclick="goTo('modOcupacional')">
     <span class="tileModuloIcono" aria-hidden="true">🏭</span>
@@ -92,24 +94,25 @@ function renderInicio() {
     <span class="tileModuloTexto">Registros EMOP, dictámenes firmados, escáneres y planes de SSO</span>
     <span class="tileModuloDato">${plural(regs.length, 'evaluación', 'evaluaciones')} · ${plural(firmados, 'firmada', 'firmadas')}</span>
   </button>
-</div>`);
+</div>
+${bannerHorario()}`);
 }
 
 // ── Módulo Clínica propia ──
 function renderModuloClinica() {
   const hoy = todayLocalISO();
   const citasHoy = state.citas.filter(c => c.fecha === hoy && c.estado !== 'cancelada').length;
-  const porConfirmar = state.citas.filter(c => c.fecha >= hoy && c.estado === 'pendiente').length;
+  const porEnviar = contarAvisosPorEnviar();
   const secciones = [
     { e:'📊', t:'Resumen del día', d:'Agenda de hoy y últimas historias', stat:plural(citasHoy, 'cita hoy', 'citas hoy'), color:'#0d4330', onclick:"goTo('dashboard')" },
     { e:'👥', t:'Pacientes', d:'Fichas, alergias y contacto', stat:plural(state.pacientes.length, 'paciente', 'pacientes'), color:'#176345', onclick:"goTo('pacientes')" },
     { e:'📋', t:'Historias clínicas', d:'Consultas agrupadas por mes', stat:plural(state.historias.length, 'historia', 'historias'), color:'#185fa5', onclick:"goTo('historias')" },
     { e:'📅', t:'Agenda', d:'Calendario y lista de citas', stat:plural(state.citas.filter(c => c.fecha >= hoy).length, 'cita próxima', 'citas próximas'), color:'#0f766e', onclick:"goTo('agenda')" },
-    { e:'🔔', t:'Recordatorios', d:'Mensajes listos para WhatsApp', stat:plural(porConfirmar, 'por confirmar', 'por confirmar'), color:'#b45309', onclick:"goTo('recordatorios')" },
+    { e:'🔔', t:'Recordatorios', d:'Mensajes listos para WhatsApp', stat:porEnviar ? `${porEnviar} por enviar hoy` : 'Al día ✓', color:'#b45309', onclick:"goTo('recordatorios')" },
     { e:'💾', t:'Respaldos', d:'Copia en OneDrive e importar', stat:oneDriveDirHandle ? 'OneDrive conectado' : '', color:'#7c3aed', onclick:"goTo('respaldos')" },
     { e:'🔑', t:'Cambiar contraseña', d:'Su contraseña de acceso', stat:'', color:'#5f5e5a', onclick:'abrirCambioContrasena()' }
   ];
-  setC(`<div class="seccionesGrid">${secciones.map(botonSeccion).join('')}</div>`);
+  setC(`${bannerHorario()}<div class="seccionesGrid">${secciones.map(botonSeccion).join('')}</div>`);
 }
 
 // ── Módulo Salud Ocupacional ──
