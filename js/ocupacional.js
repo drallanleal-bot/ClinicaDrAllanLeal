@@ -18,21 +18,33 @@ function guardarCita() {
   if (!pid) { alert('Seleccione un paciente.'); return; }
   const fecha = document.getElementById('cFecha').value;
   if (!fecha) { alert('Ingrese la fecha de la cita.'); return; }
-  const hora = document.getElementById('cHora').value || '08:00';
-  const choque = state.citas.find(x => String(x.id) !== String(editingCitaId) && x.fecha === fecha && x.hora === hora && x.estado !== 'cancelada');
-  if (choque && !confirm(`Ya hay una cita el ${fmtF(fecha)} a las ${hora} con ${getPac(choque.pacienteId).nombre}.\n\n¿Desea guardarla de todos modos?`)) return;
+  const hora = document.getElementById('cHora').value;
+  if (!hora) { alert('Ingrese la hora o toque «Primer espacio libre».'); return; }
+  const tipo = document.getElementById('cTipo').value;
+  const dur = duracionPorTipo(tipo);
+  const excluir = editingCitaId ? [editingCitaId] : [];
+  const choque = state.citas.find(x => !excluir.map(String).includes(String(x.id)) && x.fecha === fecha && citaActiva(x)
+    && aMinutos(hora) < aMinutos(x.hora) + duracionCita(x) && aMinutos(hora) + dur > aMinutos(x.hora));
+  if (choque && !confirm(`Se cruza con la cita de ${getPac(choque.pacienteId).nombre} (${fmtF(fecha)} ${choque.hora}, ${duracionCita(choque)} min).\n\n¿Desea guardarla de todos modos?`)) return;
+  if (!choque && !citaCabeEnHorario(fecha, hora, dur)) {
+    const h = horarioDelDia(fecha);
+    if (!confirm(h ? `Esta cita (${dur} min) queda fuera de su horario de ese día (${h.ini} a ${h.fin}).\n\n¿Desea guardarla de todos modos?` : 'Ese día no tiene horario de consulta.\n\n¿Desea guardarla de todos modos?')) return;
+  }
   const id = editingCitaId || state.nextCitaId++;
   const previa = state.citas.find(x => String(x.id) === String(id));
+  const movida = previa && (previa.fecha !== fecha || previa.hora !== hora);
   const cita = {
     id,
     pacienteId:pid,
-    fecha:document.getElementById('cFecha').value,
-    hora:document.getElementById('cHora').value||'08:00',
-    tipo:document.getElementById('cTipo').value,
+    fecha,
+    hora,
+    tipo,
+    duracion:dur,
     notas:document.getElementById('cNotas').value,
     recordatorio:'Calendario general',
-    estado: previa ? previa.estado : 'pendiente'
+    estado: previa && !movida ? previa.estado : 'pendiente'
   };
+  if (movida) { cita.avisos = {}; cita.sinRespuesta = false; }
   const idx = state.citas.findIndex(x => String(x.id) === String(id));
   if (idx >= 0) state.citas[idx] = { ...state.citas[idx], ...cita };
   else state.citas.push(cita);
@@ -40,6 +52,15 @@ function guardarCita() {
   closeModal('modalCita');
   editingCitaId = null;
   refreshClinicPage('agenda');
+}
+function buscarEspacioModalCita() {
+  const desde = document.getElementById('cFecha').value || todayLocalISO();
+  const dur = duracionPorTipo(document.getElementById('cTipo').value);
+  const e = primerEspacioLibre(desde, dur, { excluir:editingCitaId ? [editingCitaId] : [] });
+  if (!e) { alert('No encontré espacio libre en su horario.'); return; }
+  document.getElementById('cFecha').value = e.fecha;
+  document.getElementById('cHora').value = e.hora;
+  showToast(`🔎 ${mayuscula(fechaLarga(e.fecha))}, ${horaBonita(e.hora)} (${dur} min).`);
 }
 function confirmarCita(id) {
   const c = state.citas.find(x => String(x.id) === String(id));

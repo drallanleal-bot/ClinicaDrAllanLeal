@@ -536,6 +536,9 @@ function prepModalHistoria(pacId, histId) {
   document.getElementById('hAltura').value = h ? h.altura || '' : '';
   document.getElementById('hTratamiento').value = h ? h.tratamiento || '' : '';
   document.getElementById('hObs').value = h ? h.obs || '' : '';
+  const ctrl = document.getElementById('hControl');
+  if (ctrl) ctrl.value = h ? h.proximoControl || '' : '';
+  infoControlHistoria(h);
   const adjInput = document.getElementById('hAdjuntos');
   if (adjInput) adjInput.value = '';
   const adjName = document.getElementById('hAdjuntoNombre');
@@ -584,6 +587,7 @@ function historiaDesdeFormulario(id) {
     imcClasificacion:imcClass(imc),
     tratamiento:document.getElementById('hTratamiento').value,
     obs:document.getElementById('hObs').value,
+    proximoControl:document.getElementById('hControl')?.value || '',
     adjuntos:[]
   };
 }
@@ -608,10 +612,13 @@ async function guardarHistoria() {
   }
   if (idx >= 0) state.historias[idx] = { ...state.historias[idx], ...historia };
   else state.historias.push(historia);
+  const guardada = state.historias.find(h => String(h.id) === String(id));
+  const control = agendarControlDesdeHistoria(guardada);
   saveAppData({ backupToFolder:true });
   closeModal('modalHistoria');
   editingHistoriaId = null;
   refreshClinicPage('historias');
+  if (control) avisoControlAgendado(control);
 }
 function borrarHistoria(id) {
   const h = state.historias.find(x => String(x.id) === String(id));
