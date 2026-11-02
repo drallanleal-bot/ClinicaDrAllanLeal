@@ -8,6 +8,7 @@
 const CLINICA_FIRMA = 'Clínica Dr. Allan Leal';
 const CLINICA_DIRECCION = '8ª Calle 11-13, Zona 1, Edificio Recinos, Clínica 403';
 const CLINICA_DIRECCION_CORTA = 'Clínica 403, Edificio Recinos, Zona 1';
+const CLINICA_PARQUEO = '🚗 Parqueo a la par en Funerales Mancilla (Q20 las 3 horas). Indique que viene a consulta al Edificio Recinos.';
 const DIAS_SEMANA = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 const MESES_MIN = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 // Horario normal: lunes a jueves 4:30–6:30 p. m., viernes 3:00–6:30 p. m., sábado 9:00–14:00.
@@ -139,10 +140,10 @@ function mensajeAviso(c, tipo) {
   const cuando = `📅 ${mayuscula(fechaLarga(c.fecha))}\n⏰ ${horaBonita(c.hora)}`;
   const tele = /telemedicina/i.test(c.tipo || '');
   const dom = /domiciliar/i.test(c.tipo || '');
-  const lugar = tele ? '💻 Consulta por videollamada' : (dom ? '🏠 Visita a domicilio' : `📍 ${CLINICA_DIRECCION}`);
+  const lugar = tele ? '💻 Consulta por videollamada' : (dom ? '🏠 Visita a domicilio' : `📍 ${CLINICA_DIRECCION}\n${CLINICA_PARQUEO}`);
   if (tipo === 'diaAntes') {
     const donde = tele ? 'por videollamada' : (dom ? 'en su domicilio' : `en ${CLINICA_DIRECCION_CORTA}`);
-    return `Hola, ${nombre} 👋 Le recordamos su cita de mañana ${fechaLarga(c.fecha)} a las ${horaBonita(c.hora)} ${donde}.\n\nSi no puede asistir, responda *CAMBIAR*.\n\n${CLINICA_FIRMA}`;
+    return `Hola, ${nombre} 👋 Le recordamos su cita de mañana ${fechaLarga(c.fecha)} a las ${horaBonita(c.hora)} ${donde}.${tele || dom ? '' : `\n\n${CLINICA_PARQUEO}`}\n\nSi no puede asistir, responda *CAMBIAR*.\n\n${CLINICA_FIRMA}`;
   }
   if (tipo === 'cambio') {
     const ant = c.avisos?.cambio?.anterior;
@@ -521,7 +522,7 @@ function respuestasRapidas() {
   const h = ensureHorario();
   const dias = [1, 2, 3, 4, 5, 6].map(d => h.base[d] ? `${mayuscula(DIAS_SEMANA[d])}: ${horaBonita(h.base[d].ini)} a ${horaBonita(h.base[d].fin)}` : `${mayuscula(DIAS_SEMANA[d])}: no hay consulta`).join('\n');
   return [
-    { atajo:'/direccion', texto:`📍 ${CLINICA_DIRECCION}.\nGuatemala.\n\n${CLINICA_FIRMA}` },
+    { atajo:'/direccion', texto:`📍 ${CLINICA_DIRECCION}.\nGuatemala.\n\n${CLINICA_PARQUEO}\n\n${CLINICA_FIRMA}` },
     { atajo:'/horario', texto:`🕐 Horario de consulta (con cita):\n${dias}\n\n${CLINICA_FIRMA}` },
     { atajo:'/primera', texto:`Con gusto le atendemos. La primera consulta dura aproximadamente 1 hora. Por favor traiga su DPI, sus medicamentos actuales y exámenes recientes si los tiene.\n\n${CLINICA_FIRMA}` },
     { atajo:'/confirmada', texto:`¡Gracias! Su cita queda confirmada. Le esperamos.\n\n${CLINICA_FIRMA}` }
