@@ -1,0 +1,8 @@
+{
+  "name": "clinica-notificaciones",
+  "private": true,
+  "description": "Aviso diario al teléfono del doctor con los recordatorios por enviar (sin datos de pacientes).",
+  "dependencies": {
+    "firebase-admin": "12.7.0"
+  }
+}
