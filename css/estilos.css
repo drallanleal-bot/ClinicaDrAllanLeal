@@ -1192,3 +1192,6 @@ html,body{overflow-x:clip;max-width:100%}
   .avisoBtns .btn{flex:1 1 auto}
   .avisoChip b{font-size:20px}
 }
+
+.wazeFila{display:flex;gap:.5rem;flex-wrap:wrap}
+.wazeFila input{flex:1 1 220px;min-width:0;min-height:44px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font:inherit;font-size:14px}
