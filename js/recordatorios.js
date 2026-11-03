@@ -8,7 +8,7 @@
 const CLINICA_FIRMA = 'Clínica Dr. Allan Leal';
 const CLINICA_DIRECCION = '8ª Calle 11-13, Zona 1, Edificio Recinos, Clínica 403';
 const CLINICA_DIRECCION_CORTA = 'Clínica 403, Edificio Recinos, Zona 1';
-const WAZE_POR_DEFECTO = 'https://waze.com/ul?q=' + encodeURIComponent('Edificio Recinos, 8a Calle 11-13, Zona 1, Guatemala') + '&navigate=yes';
+const WAZE_POR_DEFECTO = 'https://waze.com/ul/h9fxek3jzx'; // ubicación exacta de la clínica (Waze → Compartir)
 // El doctor puede pegar en Recordatorios el enlace exacto que da Waze al compartir la ubicación.
 function enlaceWaze() { return (state.socialLinks?.waze || '').trim() || WAZE_POR_DEFECTO; }
 function lineaWaze() { return `🧭 Cómo llegar en Waze: ${enlaceWaze()}`; }
