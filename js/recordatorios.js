@@ -8,6 +8,10 @@
 const CLINICA_FIRMA = 'Clínica Dr. Allan Leal';
 const CLINICA_DIRECCION = '8ª Calle 11-13, Zona 1, Edificio Recinos, Clínica 403';
 const CLINICA_DIRECCION_CORTA = 'Clínica 403, Edificio Recinos, Zona 1';
+const WAZE_POR_DEFECTO = 'https://waze.com/ul?q=' + encodeURIComponent('Edificio Recinos, 8a Calle 11-13, Zona 1, Guatemala') + '&navigate=yes';
+// El doctor puede pegar en Recordatorios el enlace exacto que da Waze al compartir la ubicación.
+function enlaceWaze() { return (state.socialLinks?.waze || '').trim() || WAZE_POR_DEFECTO; }
+function lineaWaze() { return `🧭 Cómo llegar en Waze: ${enlaceWaze()}`; }
 const CLINICA_PARQUEO = '🚗 Parqueo a la par en Funerales Mancilla (Q20 las 3 horas). Indique que viene a consulta al Edificio Recinos.';
 const DIAS_SEMANA = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 const MESES_MIN = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -140,10 +144,10 @@ function mensajeAviso(c, tipo) {
   const cuando = `📅 ${mayuscula(fechaLarga(c.fecha))}\n⏰ ${horaBonita(c.hora)}`;
   const tele = /telemedicina/i.test(c.tipo || '');
   const dom = /domiciliar/i.test(c.tipo || '');
-  const lugar = tele ? '💻 Consulta por videollamada' : (dom ? '🏠 Visita a domicilio' : `📍 ${CLINICA_DIRECCION}\n${CLINICA_PARQUEO}`);
+  const lugar = tele ? '💻 Consulta por videollamada' : (dom ? '🏠 Visita a domicilio' : `📍 ${CLINICA_DIRECCION}\n${lineaWaze()}\n${CLINICA_PARQUEO}`);
   if (tipo === 'diaAntes') {
     const donde = tele ? 'por videollamada' : (dom ? 'en su domicilio' : `en ${CLINICA_DIRECCION_CORTA}`);
-    return `Hola, ${nombre} 👋 Le recordamos su cita de mañana ${fechaLarga(c.fecha)} a las ${horaBonita(c.hora)} ${donde}.${tele || dom ? '' : `\n\n${CLINICA_PARQUEO}`}\n\nSi no puede asistir, responda *CAMBIAR*.\n\n${CLINICA_FIRMA}`;
+    return `Hola, ${nombre} 👋 Le recordamos su cita de mañana ${fechaLarga(c.fecha)} a las ${horaBonita(c.hora)} ${donde}.${tele || dom ? '' : `\n\n${lineaWaze()}\n${CLINICA_PARQUEO}`}\n\nSi no puede asistir, responda *CAMBIAR*.\n\n${CLINICA_FIRMA}`;
   }
   if (tipo === 'cambio') {
     const ant = c.avisos?.cambio?.anterior;
@@ -488,6 +492,17 @@ function enviarTextoPaciente(id, texto) {
   showToast('📋 Mensaje copiado.');
 }
 
+function guardarEnlaceWaze() {
+  const v = (document.getElementById('wazeEnlace')?.value || '').trim();
+  const m = v.match(/https?:\/\/\S+/);
+  if (v && (!m || !/waze\.com/i.test(m[0]))) { alert('Pegue un enlace de Waze (empieza con https://waze.com/...).'); return; }
+  state.socialLinks = state.socialLinks || {};
+  state.socialLinks.waze = m ? m[0] : '';
+  saveAppData({ backupToFolder:true });
+  showToast(v ? '🧭 Enlace de Waze guardado.' : '🧭 Se usará la búsqueda por dirección.');
+  renderRecordatorios();
+}
+
 // ── Pantalla ──
 function filaAviso(item) {
   const { c, tipo } = item;
@@ -522,7 +537,7 @@ function respuestasRapidas() {
   const h = ensureHorario();
   const dias = [1, 2, 3, 4, 5, 6].map(d => h.base[d] ? `${mayuscula(DIAS_SEMANA[d])}: ${horaBonita(h.base[d].ini)} a ${horaBonita(h.base[d].fin)}` : `${mayuscula(DIAS_SEMANA[d])}: no hay consulta`).join('\n');
   return [
-    { atajo:'/direccion', texto:`📍 ${CLINICA_DIRECCION}.\nGuatemala.\n\n${CLINICA_PARQUEO}\n\n${CLINICA_FIRMA}` },
+    { atajo:'/direccion', texto:`📍 ${CLINICA_DIRECCION}.\nGuatemala.\n${lineaWaze()}\n\n${CLINICA_PARQUEO}\n\n${CLINICA_FIRMA}` },
     { atajo:'/horario', texto:`🕐 Horario de consulta (con cita):\n${dias}\n\n${CLINICA_FIRMA}` },
     { atajo:'/primera', texto:`Con gusto le atendemos. La primera consulta dura aproximadamente 1 hora. Por favor traiga su DPI, sus medicamentos actuales y exámenes recientes si los tiene.\n\n${CLINICA_FIRMA}` },
     { atajo:'/confirmada', texto:`¡Gracias! Su cita queda confirmada. Le esperamos.\n\n${CLINICA_FIRMA}` }
@@ -564,6 +579,15 @@ ${bannerHorario()}
     <button class="btn btn-outline" onclick="abrirHorarioSemana('${lunesSig}')">✏️ Próxima semana</button>
   </div>
   <p class="avisoNota" style="margin-top:.6rem">Primera consulta: 1 hora · Seguimiento: 30 minutos.</p>
+</div>
+<div class="card">
+  <div class="cardTitle">🧭 Ubicación en Waze</div>
+  <p class="avisoNota">Va en todos los mensajes de citas en la clínica. Para que sea exacta: en Waze busque la clínica, toque <b>Compartir</b> → <b>Copiar</b> y péguelo aquí.</p>
+  <div class="wazeFila">
+    <input type="url" id="wazeEnlace" value="${escapeHtml(state.socialLinks?.waze || '')}" placeholder="${escapeHtml(WAZE_POR_DEFECTO)}">
+    <button class="btn btn-primary" onclick="guardarEnlaceWaze()">💾 Guardar</button>
+    <button class="btn btn-outline" onclick="window.open(enlaceWaze(),'_blank','noopener')">🧭 Probar</button>
+  </div>
 </div>
 <details class="card avisoRapidas">
   <summary class="cardTitle">💬 Respuestas rápidas para WhatsApp Business</summary>
