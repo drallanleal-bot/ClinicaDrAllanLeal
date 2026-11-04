@@ -571,6 +571,7 @@ ${bannerHorario()}
   <div class="cardTitle">📞 Por llamar</div>
   ${llamar.length ? llamar.map(c => filaRespuesta(c, true)).join('') : '<div class="listaVacia">No hay pacientes por llamar.</div>'}
 </div>
+${typeof tarjetaNotificaciones === 'function' ? tarjetaNotificaciones() : ''}
 <div class="card">
   <div class="cardTitle">🗓️ Horario de atención</div>
   <p class="avisoNota">Esta semana: ${escapeHtml(resumenHorarioSemana(lunesDe(hoy)))}</p>

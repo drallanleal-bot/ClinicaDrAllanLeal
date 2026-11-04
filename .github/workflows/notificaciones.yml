@@ -1,0 +1,30 @@
+name: Aviso diario al teléfono
+
+on:
+  schedule:
+    - cron: '23 13 * * *'   # 7:23 a. m. hora de Guatemala
+  workflow_dispatch:
+    inputs:
+      prueba:
+        description: 'Enviar aunque no haya pendientes'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  avisar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install --omit=dev --no-audit --no-fund
+        working-directory: notificaciones
+      - run: node notificaciones/enviar.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PRUEBA: ${{ github.event_name == 'workflow_dispatch' && inputs.prueba }}
