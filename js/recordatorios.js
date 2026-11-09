@@ -23,6 +23,7 @@ const HORARIO_BASE = {
   6:{ ini:'09:00', fin:'14:00' }
 };
 const PLAZOS_CONTROL = {
+  'fecha':{ t:'fecha elegida' }, '7d':{ dias:7, t:'1 semana' },
   '15d':{ dias:15, t:'15 días' }, '1m':{ meses:1, t:'1 mes' }, '2m':{ meses:2, t:'2 meses' }, '3m':{ meses:3, t:'3 meses' },
   '4m':{ meses:4, t:'4 meses' }, '6m':{ meses:6, t:'6 meses' }, '12m':{ meses:12, t:'1 año' }
 };
@@ -425,7 +426,8 @@ function aplicarPropuestasCambio() {
 }
 
 // ── Próximo control desde la historia clínica ──
-function fechaObjetivoControl(desde, plazo) {
+function fechaObjetivoControl(desde, plazo, fechaElegida) {
+  if (plazo === 'fecha') return fechaElegida || null;
   const p = PLAZOS_CONTROL[plazo];
   if (!p) return null;
   return p.dias ? sumarDias(desde, p.dias) : sumarMeses(desde, p.meses);
@@ -434,14 +436,16 @@ function fechaObjetivoControl(desde, plazo) {
 function agendarControlDesdeHistoria(h) {
   if (!h || !h.proximoControl || !PLAZOS_CONTROL[h.proximoControl]) return null;
   const existente = h.citaControlId ? citaPorId(h.citaControlId) : null;
-  if (existente && citaActiva(existente) && existente.controlPlazo === h.proximoControl) return null;
-  const manana = sumarDias(todayLocalISO(), 1);
-  let objetivo = fechaObjetivoControl(h.fecha || todayLocalISO(), h.proximoControl);
-  if (objetivo < manana) objetivo = manana;
+  if (existente && citaActiva(existente) && existente.controlPlazo === h.proximoControl && (h.proximoControl !== 'fecha' || existente.controlFecha === h.controlFecha)) return null;
+  // Con fecha elegida se permite desde hoy (por ejemplo, control en 48 horas); con plazo, desde mañana.
+  const minimo = h.proximoControl === 'fecha' ? todayLocalISO() : sumarDias(todayLocalISO(), 1);
+  let objetivo = fechaObjetivoControl(h.fecha || todayLocalISO(), h.proximoControl, h.controlFecha);
+  if (!objetivo) return null;
+  if (objetivo < minimo) objetivo = minimo;
   const espacio = primerEspacioLibre(objetivo, 30, { excluir:existente ? [existente.id] : [] });
   if (!espacio) { alert('No encontré espacio libre en su horario para el control. Agéndelo a mano desde Agenda.'); return null; }
   if (existente && citaActiva(existente)) {
-    Object.assign(existente, { fecha:espacio.fecha, hora:espacio.hora, controlPlazo:h.proximoControl, estado:'pendiente', avisos:{}, sinRespuesta:false });
+    Object.assign(existente, { fecha:espacio.fecha, hora:espacio.hora, controlPlazo:h.proximoControl, controlFecha:h.controlFecha || '', estado:'pendiente', avisos:{}, sinRespuesta:false });
     return existente;
   }
   const cita = {
@@ -451,11 +455,12 @@ function agendarControlDesdeHistoria(h) {
     hora:espacio.hora,
     tipo:'Presencial - Seguimiento',
     duracion:30,
-    notas:`Control en ${PLAZOS_CONTROL[h.proximoControl].t} (agendado desde la historia)`,
+    notas:h.proximoControl === 'fecha' ? 'Control en fecha elegida (agendado desde la historia)' : `Control en ${PLAZOS_CONTROL[h.proximoControl].t} (agendado desde la historia)`,
     recordatorio:'Calendario general',
     estado:'pendiente',
     origen:'control',
     controlPlazo:h.proximoControl,
+    controlFecha:h.controlFecha || '',
     historiaId:h.id,
     avisos:{}
   };

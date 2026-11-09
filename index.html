@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/estilos.css?v=20261105">
+<link rel="stylesheet" href="css/estilos.css?v=20261109">
 </head>
 <body>
 
@@ -79,9 +79,10 @@
     <details class="fSection" data-sec="consulta" open>
     <summary>Consulta</summary>
     <div class="fRow">
-      <div class="fGroup"><label>Paciente <span class="req">*</span></label><select id="hPaciente" onchange="renderPatientPreviousAttachments(this.value, editingHistoriaId)"><option value="">Seleccionar...</option></select></div>
+      <div class="fGroup"><label>Paciente <span class="req">*</span></label><select id="hPaciente" onchange="alCambiarPacienteHistoria(this.value)"><option value="">Seleccionar...</option></select></div>
       <div class="fGroup"><label>Fecha de consulta <span class="req">*</span></label><input type="date" id="hFecha"/></div>
     </div>
+    <div class="resumenPac" id="hResumenPaciente" hidden></div>
     <div class="fRow full">
       <div class="fGroup attachPanel">
         <label>Laboratorios previos del paciente</label>
@@ -90,7 +91,7 @@
     </div>
     <div class="fRow">
       <div class="fGroup"><label>Motivo de consulta</label><input type="text" id="hMotivo" placeholder="Ej: Cefalea persistente"/></div>
-      <div class="fGroup"><label>Diagnóstico</label><input type="text" id="hDiagnostico" placeholder="Ej: Migraña tensional"/></div>
+      <div class="fGroup"><label>Diagnóstico</label><textarea id="hDiagnostico" rows="2" placeholder="Ej: DM2, HTA, dislipidemia" oninput="quitarMarcaPrellenado(this)"></textarea></div>
     </div>
     </details>
     <details class="fSection" data-sec="anamnesis" open>
@@ -111,9 +112,12 @@
       <div class="fGroup"><label>Saturación O₂</label><input type="text" id="hSat" placeholder="98%" oninput="checkVitalField('hSat')"/><div class="vitalMsg" id="hSat_msg"></div></div>
       <div class="fGroup"><label>GMT</label><input type="text" id="hGMT" placeholder="95 mg/dL" oninput="checkVitalField('hGMT')"/><div class="vitalMsg" id="hGMT_msg"></div></div>
     </div>
-    <div class="fRow three">
-      <div class="fGroup"><label>Peso kg</label><input type="number" step="0.1" id="hPesoKg" placeholder="70" oninput="updateClinicImc()"/></div>
-      <div class="fGroup"><label>Altura m o cm</label><input type="number" step="0.01" id="hAltura" placeholder="1.70" oninput="updateClinicImc()"/></div>
+    <div class="fRow">
+      <div class="fGroup"><label>Peso en libras</label><input type="number" step="0.1" inputmode="decimal" id="hPesoLb" placeholder="154" oninput="pesoDesdeLibras()"/></div>
+      <div class="fGroup"><label>Peso kg (se calcula solo)</label><input type="number" step="0.1" inputmode="decimal" id="hPesoKg" placeholder="70" oninput="pesoDesdeKg()"/></div>
+    </div>
+    <div class="fRow">
+      <div class="fGroup"><label>Altura m o cm</label><input type="number" step="0.01" inputmode="decimal" id="hAltura" placeholder="1.70" oninput="updateClinicImc();quitarMarcaPrellenado(this)"/></div>
       <div class="fGroup"><label>IMC y clasificación</label><input type="text" id="hIMC" readonly placeholder="Automático"/></div>
     </div>
     </details>
@@ -126,15 +130,17 @@
     <details class="fSection" data-sec="plan">
     <summary>Plan</summary>
     <div class="fRow full">
-      <div class="fGroup"><label>Tratamiento y prescripción</label><textarea id="hTratamiento" rows="3" placeholder="Medicamentos, dosis, vía de administración, duración..."></textarea></div>
+      <div class="fGroup"><label>Tratamiento y prescripción</label><textarea id="hTratamiento" rows="5" oninput="quitarMarcaPrellenado(this)" placeholder="Medicamentos, dosis, vía de administración, duración..."></textarea></div>
     </div>
     <div class="fRow full">
       <div class="fGroup"><label>Observaciones y seguimiento</label><textarea id="hObs" rows="2" placeholder="Próxima cita, exámenes solicitados, indicaciones..."></textarea></div>
     </div>
     <div class="fRow full">
       <div class="fGroup"><label>📅 Próximo control</label>
-        <select id="hControl">
+        <select id="hControl" onchange="mostrarFechaControl()">
           <option value="">Sin control por ahora</option>
+          <option value="fecha">📆 Fecha específica (elegir)</option>
+          <option value="7d">En 1 semana</option>
           <option value="15d">En 15 días</option>
           <option value="1m">En 1 mes</option>
           <option value="2m">En 2 meses</option>
@@ -143,6 +149,7 @@
           <option value="6m">En 6 meses</option>
           <option value="12m">En 1 año</option>
         </select>
+        <div class="fGroup" id="hControlFechaCaja" hidden style="margin-top:.5rem"><label>¿Qué día?</label><input type="date" id="hControlFecha"/></div>
         <div class="fAyuda" id="hControlInfo">Al guardar, la app aparta el primer espacio libre en su horario.</div>
       </div>
     </div>
@@ -263,19 +270,20 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 
 <!-- Al cambiar un archivo de css/ o js/, sube el número de ?v= para que los navegadores no usen la copia vieja. -->
-<script src="js/firebase-config.js?v=20261105"></script>
-<script src="js/datos.js?v=20261105"></script>
-<script src="js/sincronizacion.js?v=20261105"></script>
-<script src="js/respaldos.js?v=20261105"></script>
-<script src="js/sesion.js?v=20261105"></script>
-<script src="js/vistas-clinica.js?v=20261105"></script>
-<script src="js/ocupacional.js?v=20261105"></script>
-<script src="js/recordatorios.js?v=20261105"></script>
-<script src="js/notificaciones.js?v=20261105"></script>
-<script src="js/vendor/qrcode.js?v=20261105"></script>
-<script src="js/documentos.js?v=20261105"></script>
-<script src="js/navegacion.js?v=20261105"></script>
-<script src="js/inicio.js?v=20261105"></script>
+<script src="js/firebase-config.js?v=20261109"></script>
+<script src="js/datos.js?v=20261109"></script>
+<script src="js/sincronizacion.js?v=20261109"></script>
+<script src="js/respaldos.js?v=20261109"></script>
+<script src="js/sesion.js?v=20261109"></script>
+<script src="js/vistas-clinica.js?v=20261109"></script>
+<script src="js/ocupacional.js?v=20261109"></script>
+<script src="js/recordatorios.js?v=20261109"></script>
+<script src="js/notificaciones.js?v=20261109"></script>
+<script src="js/pacientes-extra.js?v=20261109"></script>
+<script src="js/vendor/qrcode.js?v=20261109"></script>
+<script src="js/documentos.js?v=20261109"></script>
+<script src="js/navegacion.js?v=20261109"></script>
+<script src="js/inicio.js?v=20261109"></script>
 
 </body>
 </html>
