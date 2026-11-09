@@ -43,6 +43,7 @@ function renderResumenPacienteHistoria(pid) {
   const alergias = String(p.alergias || '').trim();
   const sinAlergias = !alergias || /^ningun/i.test(alergias);
   const ultima = previas[0];
+  const glucometrias = previas.slice(1).filter(h => String(h.gmt || '').trim()).slice(0, 6);
   box.hidden = false;
   box.innerHTML = `
     <div class="resumenPacCab"><strong>🧾 Antecedentes de ${escapeHtml(p.nombre || '')}</strong>
@@ -53,12 +54,14 @@ function renderResumenPacienteHistoria(pid) {
       <div class="resumenPacDato"><b>Antecedentes familiares</b><span>${textoLineas(p.familiares) || '<i>Sin registrar</i>'}</span></div>
     </div>
     ${ultima ? `<div class="resumenPacUltima">
-      <b>Última consulta: ${fmtF(ultima.fecha)}</b>${ultima.pesoKg ? ` · Peso ${escapeHtml(String(ultima.pesoKg))} kg (${redondear1(Number(ultima.pesoKg) * LIBRAS_POR_KG)} lb)` : ''}${ultima.ta ? ` · PA ${escapeHtml(ultima.ta)}` : ''}${ultima.gmt ? ` · GMT ${escapeHtml(ultima.gmt)}` : ''}
+      <b>Última consulta: ${fmtF(ultima.fecha)}</b>${ultima.pesoKg ? ` · Peso ${escapeHtml(String(ultima.pesoKg))} kg (${redondear1(Number(ultima.pesoKg) * LIBRAS_POR_KG)} lb)` : ''}${ultima.ta ? ` · PA ${escapeHtml(ultima.ta)}` : ''}
+      <div><b>🩸 Glucómetro:</b> ${ultima.gmt ? escapeHtml(ultima.gmt) : 'no se tomó'}</div>
+      ${glucometrias.length ? `<div class="resumenPacGluco"><b>Glucómetro en consultas anteriores:</b> ${glucometrias.map(h => `${escapeHtml(h.gmt)} <span>(${fmtF(h.fecha)})</span>`).join(' · ')}</div>` : ''}
       ${ultima.diagnostico ? `<div><b>Dx:</b> ${textoLineas(ultima.diagnostico)}</div>` : ''}
       ${ultima.tratamiento ? `<div><b>Tratamiento que se dejó:</b><br>${textoLineas(ultima.tratamiento)}</div>` : ''}
     </div>
     ${previas.length > 1 ? `<details class="resumenPacPrevias"><summary>Ver todas las consultas anteriores (${previas.length})</summary>
-      ${previas.map(h => `<div class="resumenPacConsulta"><b>${fmtF(h.fecha)}</b>${h.motivo ? ` · ${escapeHtml(h.motivo)}` : ''}${h.pesoKg ? ` · ${escapeHtml(String(h.pesoKg))} kg` : ''}
+      ${previas.map(h => `<div class="resumenPacConsulta"><b>${fmtF(h.fecha)}</b>${h.motivo ? ` · ${escapeHtml(h.motivo)}` : ''}${h.pesoKg ? ` · ${escapeHtml(String(h.pesoKg))} kg` : ''}${h.ta ? ` · PA ${escapeHtml(h.ta)}` : ''}${h.gmt ? ` · 🩸 ${escapeHtml(h.gmt)}` : ''}
         ${h.diagnostico ? `<div><b>Dx:</b> ${textoLineas(h.diagnostico)}</div>` : ''}
         ${h.tratamiento ? `<div><b>Tx:</b> ${textoLineas(h.tratamiento)}</div>` : ''}</div>`).join('')}
     </details>` : ''}` : '<div class="resumenPacUltima">Primera consulta registrada en la app.</div>'}

@@ -1218,3 +1218,4 @@ textarea.prellenado,input.prellenado{background:#fffbea;border-color:#f2c879}
 .filaDup input{width:20px;height:20px;margin-top:2px;flex:none}
 .filaDup .filaSub{display:block}
 @media (max-width:700px){.resumenPacGrid{grid-template-columns:1fr}}
+.resumenPacGluco span{color:#6c7974;font-size:12px}
