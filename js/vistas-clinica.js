@@ -209,6 +209,7 @@ function renderPacientes() {
 <div class="searchRow">
   <input type="text" id="searchPac" placeholder="🔍  Buscar paciente por código, nombre o documento..." oninput="filtrarPacientes()"/>
   <button class="btn btn-primary" onclick="prepModalPaciente();openModal('modalPaciente')">+ Nuevo paciente</button>
+  <button class="btn btn-outline" onclick="abrirLimpiezaPacientes()">🧹 Repetidos y de prueba${gruposDuplicados().length ? ` (${gruposDuplicados().length})` : ''}</button>
 </div>
 <div class="card">
   <div class="cardTitle">👥 Pacientes <span class="occMini" id="conteoPacientes"></span></div>
@@ -406,6 +407,8 @@ function guardarPaciente() {
   const codigo = current && current.codigo ? current.codigo : String(state.nextPacCode || state.pacientes.length + 1).padStart(6, '0');
   const paciente = pacienteDesdeFormulario(codigo);
   if (!paciente) return;
+  const parecido = pacienteParecido(paciente.nombre, paciente.doc, editingPacienteId);
+  if (parecido && !confirm(`Ya existe «${parecido.nombre}» (código ${patientCode(parecido)}${parecido.doc ? ', DPI ' + parecido.doc : ''}).\n\n¿Guardar de todos modos como otro paciente?`)) return;
 
   if (editingPacienteId) {
     const idx = state.pacientes.findIndex(p => String(p.id) === String(editingPacienteId));
@@ -552,6 +555,9 @@ function prepModalHistoria(pacId, histId) {
   historiaVitalOriginals = h ? { hTA:h.ta, hFC:h.fc, hFR:h.fr, hTemp:h.temp, hSat:h.sat, hGMT:h.gmt } : {};
   Object.keys(VITAL_RULES).forEach(checkVitalField);
   setHistoriaSections(h);
+  const fechaCtrl = document.getElementById('hControlFecha');
+  if (fechaCtrl) fechaCtrl.value = h ? h.controlFecha || '' : '';
+  prepararAyudasHistoria(h);
 }
 function historiaDesdeFormulario(id) {
   const pid = document.getElementById('hPaciente').value;
@@ -582,12 +588,14 @@ function historiaDesdeFormulario(id) {
     gmt:document.getElementById('hGMT').value,
     pesoKg:document.getElementById('hPesoKg').value,
     altura:document.getElementById('hAltura').value,
-    peso:`${document.getElementById('hPesoKg').value || '—'} kg / ${document.getElementById('hAltura').value || '—'}`,
+    peso:`${document.getElementById('hPesoKg').value || '—'} kg${document.getElementById('hPesoLb')?.value ? ` (${document.getElementById('hPesoLb').value} lb)` : ''} / ${document.getElementById('hAltura').value || '—'}`,
     imc,
     imcClasificacion:imcClass(imc),
     tratamiento:document.getElementById('hTratamiento').value,
     obs:document.getElementById('hObs').value,
     proximoControl:document.getElementById('hControl')?.value || '',
+    controlFecha:document.getElementById('hControl')?.value === 'fecha' ? document.getElementById('hControlFecha')?.value || '' : '',
+    pesoLb:document.getElementById('hPesoLb')?.value || '',
     adjuntos:[]
   };
 }
@@ -595,6 +603,7 @@ async function guardarHistoria() {
   const id = editingHistoriaId || state.nextHistId;
   const historia = historiaDesdeFormulario(id);
   if (!historia) return;
+  if (historia.proximoControl === 'fecha' && !historia.controlFecha) { alert('Elija el día del próximo control.'); return; }
   if (!editingHistoriaId) state.nextHistId++;
   const idx = state.historias.findIndex(h => String(h.id) === String(id));
   const previousAdjuntos = idx >= 0 && Array.isArray(state.historias[idx].adjuntos) ? state.historias[idx].adjuntos : [];
