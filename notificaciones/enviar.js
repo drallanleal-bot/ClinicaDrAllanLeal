@@ -46,6 +46,8 @@ async function main() {
     const datos = u.data() || {};
     const tokens = Array.isArray(datos.pushTokens) ? datos.pushTokens.filter(Boolean) : [];
     if (!tokens.length || datos.active !== true) continue;
+    // Hay varios horarios de respaldo en la mañana: solo se manda una vez al día.
+    if (!prueba && datos.pushUltimoAviso === hoyGuatemala()) { console.log('Ya se avisó hoy.'); continue; }
     const res = await admin.messaging().sendEachForMulticast({
       tokens,
       data:{ titulo:'Clínica Dr. Allan Leal', cuerpo, url:'./' },
@@ -54,6 +56,7 @@ async function main() {
     const vencidos = res.responses.map((x, i) => (!x.success && /registration-token-not-registered|invalid-registration-token|invalid-argument/.test(x.error?.code || '')) ? tokens[i] : null).filter(Boolean);
     console.log(`Usuario ${u.id.slice(0, 6)}…: ${res.successCount} enviados, ${res.failureCount} fallidos`);
     if (vencidos.length) await u.ref.update({ pushTokens:admin.firestore.FieldValue.arrayRemove(...vencidos) });
+    if (res.successCount && !prueba) await u.ref.update({ pushUltimoAviso:hoyGuatemala() });
   }
 }
 

@@ -2,7 +2,11 @@ name: Aviso diario al teléfono
 
 on:
   schedule:
-    - cron: '23 13 * * *'   # 7:23 a. m. hora de Guatemala
+    # GitHub a veces atrasa estas tareas varias horas: se programan tres intentos
+    # y el aviso solo sale una vez al día (el primero que corra).
+    - cron: '7 12 * * *'    # 6:07 a. m. hora de Guatemala
+    - cron: '53 12 * * *'   # 6:53 a. m.
+    - cron: '41 13 * * *'   # 7:41 a. m.
   workflow_dispatch:
     inputs:
       prueba:
